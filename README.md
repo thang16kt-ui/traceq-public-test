@@ -2,7 +2,7 @@
 
 MVP có mã nguồn frontend React/TypeScript, API FastAPI, PostgreSQL thật, worker/scheduler/importer độc lập và hợp đồng file kiểm tra được. Luồng chính: tạo đợt và mẫu số → tạo hồ sơ nháp/tem QR → quét, đăng nhập và bấm xác nhận → xem số liệu → xuất snapshot theo lịch → nhập vào mirror phân tích.
 
-Mã nguồn triển khai và kết quả đã kiểm chứng được phân biệt trong [docs/verification.md](docs/verification.md). Giao diện có chế độ **minh họa chỉ đọc** khi chưa nối API; chế độ này không lưu nghiệp vụ và không phải database vận hành. Không có tuyên bố đã triển khai trên tên miền công khai.
+Mã nguồn triển khai và kết quả đã kiểm chứng được phân biệt trong [docs/verification.md](docs/verification.md). Giao diện có chế độ **minh họa chỉ đọc** khi chưa nối API; chế độ này không lưu nghiệp vụ và không phải database vận hành. Bản test public hiện tại: https://traceq-public-test-m2sk.onrender.com. Cấu hình và giới hạn của bản test xem [docs/public-test.md](docs/public-test.md).
 
 ## Chạy thử đầy đủ bằng Docker Compose
 
@@ -111,7 +111,7 @@ Kết quả đã đo, tài nguyên và giới hạn xem [verification.md](docs/v
 |---|---|---|
 | Ghi nhận | Tạo danh mục trong Settings/API, đợt/mẫu số, hồ sơ nhiều lỗi, tem PNG/PDF, tra cứu/xác nhận, idempotency, audit | Tài khoản quản trị qua CLI; serial hiện duy nhất trong lô; giao diện hiển thị tối đa 100 hồ sơ gần nhất |
 | Xử lý | Trạng thái, phân công, lý do, kết quả, kiểm phiên bản | Cần xác nhận quy trình duyệt và danh mục kết quả thực tế |
-| Phân tích | Tổng hợp SQL, Pareto, xu hướng ngày, so nhóm đúng mẫu số, chi phí/phân bổ và mirror nhập | UI lọc ngày; bộ lọc sản phẩm/lô/ca/công đoạn đầy đủ qua API. Chưa có đầy đủ biểu đồ tuần/tháng/so kỳ và cấu hình cảnh báo nghiệp vụ |
+| Phân tích | Tổng hợp SQL, Pareto, xu hướng ngày, so nhóm đúng mẫu số, chi phí/phân bổ và mirror nhập | UI lọc thời gian, loại sản phẩm và lô; bộ lọc ca/công đoạn qua API. Chưa có đầy đủ biểu đồ tuần/tháng/so kỳ và cấu hình cảnh báo nghiệp vụ |
 | Xuất/nhập | PostgreSQL queue, lịch IANA, retry/heartbeat, snapshot bất biến CSV/XLSX ZIP, checksum/schema/import idempotent | Bridge HTTPS qua mạng nhà máy chưa triển khai; chỉ volume tích hợp cục bộ/tải thủ công |
 | Minh chứng/chi phí | API ảnh JPEG/PNG có giới hạn/quyền và API chi phí Decimal/phân bổ | UI nhập minh chứng/chi phí và workflow mở rộng chưa đầy đủ |
 | Camera | Quét trình duyệt và nhập tay, xử lý HTTPS/quyền camera | Cần nghiệm thu trên điện thoại/máy in/tem thật |
@@ -122,6 +122,10 @@ Kết quả đã đo, tài nguyên và giới hạn xem [verification.md](docs/v
 Danh mục mức độ hiện cố định `low/medium/high/critical`, kết quả đóng `passed_after_repair/scrapped/other`; yêu cầu cấu hình tùy ngành cần mở rộng có migration/API/UI tương ứng. Ứng dụng MVP dùng một tổ chức, chưa có tenant/multi-site độc lập.
 
 ## Tài liệu và cấu trúc
+
+- [Sửa/xóa/khôi phục danh mục](docs/catalog-lifecycle.md)
+- [Bộ lọc phân tích loại sản phẩm → lô](docs/analysis-filters.md)
+- [Xử lý và kiểm chứng trang trắng](docs/blank-screen-recovery.md)
 
 - [Thiết kế, flow, kiến trúc, ERD và màn hình](docs/design.md)
 - [Từ điển dữ liệu, mẫu số và chi phí](docs/data-dictionary.md)

@@ -1,1 +1,42 @@
-<!doctype html><html lang="vi"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#102f2e"/><meta name="description" content="TraceQ — ghi nhận sản phẩm lỗi bằng QR, truy xuất minh chứng và ưu tiên chất lượng."/><title>TraceQ · Quản lý chất lượng</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#102f2e"/>
+  <meta name="description" content="TraceQ — ghi nhận sản phẩm lỗi bằng QR, truy xuất minh chứng và ưu tiên chất lượng."/>
+  <title>TraceQ · Quản lý chất lượng</title>
+  <style>
+    .app-recovery{font:16px/1.6 system-ui,sans-serif;max-width:560px;margin:12vh auto;padding:24px;color:#203437;overflow-wrap:anywhere}
+    .app-recovery h1{font-size:24px;margin:0 0 16px}.app-recovery p{margin:12px 0}
+    .app-recovery button{min-height:48px;padding:12px 20px;background:#147e6b;color:white;border:0;border-radius:8px;font:inherit;cursor:pointer}
+    .app-recovery details{margin-top:20px}.app-recovery summary{cursor:pointer}
+  </style>
+</head>
+<body>
+  <div id="root"><main id="traceq-startup" class="app-recovery" role="status">
+    <h1>TraceQ</h1><p id="traceq-startup-text">Đang mở ứng dụng…</p>
+    <button id="traceq-startup-retry" type="button" hidden>Tải lại TraceQ</button>
+    <noscript>Hãy bật JavaScript hoặc mở bằng Chrome/Safari để sử dụng ứng dụng.</noscript>
+  </main></div>
+  <script>
+    (function(){
+      function show(message){
+        var text=document.getElementById('traceq-startup-text');
+        var button=document.getElementById('traceq-startup-retry');
+        if(text)text.textContent=message;
+        if(button)button.hidden=false;
+      }
+      document.getElementById('traceq-startup-retry').onclick=function(){
+        var url=new URL(location.href);url.searchParams.set('reload',String(Date.now()));location.replace(url.toString());
+      };
+      window.addEventListener('error',function(event){
+        if(event.target===window||(event.target&&event.target.tagName==='SCRIPT'))show('Chưa tải được giao diện. Hãy thử tải lại hoặc mở link bằng Chrome/Safari.');
+      },true);
+      window.addEventListener('unhandledrejection',function(){show('Chưa khởi động được giao diện. Hãy thử tải lại TraceQ.');});
+      window.setTimeout(function(){show('Kết nối đang chậm. Bạn có thể chờ thêm hoặc thử tải lại TraceQ.');},15000);
+    })();
+  </script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

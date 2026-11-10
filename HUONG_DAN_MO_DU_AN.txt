@@ -1,0 +1,24 @@
+TRACEQ — GÓI MÃ NGUỒN
+
+1. Dùng app ngay trên web:
+   https://traceq-public-test-m2sk.onrender.com
+
+2. File ZIP này là mã nguồn để bàn giao hoặc tiếp tục phát triển.
+   Giải nén và đọc README.md. Không mở trực tiếp frontend/dist/index.html:
+   app cần máy chủ API và PostgreSQL chạy cùng giao diện.
+
+3. Nhờ người triển khai làm theo mục Docker Compose trong README.md.
+   Có sẵn cấu hình Render trong render.test-free.yaml và hướng dẫn
+   tại docs/public-test.md.
+
+4. Gói gồm giao diện React/TypeScript (và bản build), backend FastAPI,
+   worker, migrations, kiểm thử và tài liệu. Có sửa/xóa/khôi phục danh mục,
+   bộ lọc loại sản phẩm → lô và xử lý lỗi tương thích gây trang trắng.
+
+5. Không kèm mật khẩu, database hiện có, ảnh/file nghiệp vụ hoặc thư mục
+   cài thư viện. Nếu chuyển hệ thống đang chạy sang nơi khác, cần bàn giao
+   database và file nghiệp vụ theo quy trình sao lưu riêng.
+
+6. Mật khẩu bất kỳ chỉ được bật cho quản lý danh mục của bản test public
+   với các cờ môi trường được nêu trong docs/catalog-lifecycle.md.
+   Không có mật khẩu quản trị mặc định cho bản cài đặt mới.

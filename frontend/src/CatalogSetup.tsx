@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import type {FormEvent, KeyboardEvent, ReactNode} from 'react';
-import {api, allCatalogRows, errorMessage, formatTime} from './api';
+import {api, allCatalogRows, makeRequestId, errorMessage, formatTime} from './api';
 import type {Row} from './api';
 
 const kinds = [['product-types','Loại sản phẩm'],['batches','Lô sản xuất'],['defect-types','Loại lỗi']];
@@ -61,7 +61,7 @@ export default function CatalogSetup({demo,demoLogin,user,onAuthenticated,onSave
 
   function requestKey(path:string, body:Row){
     const signature=JSON.stringify([path,body]);
-    if(!keys.current.has(signature))keys.current.set(signature,crypto.randomUUID());
+    if(!keys.current.has(signature))keys.current.set(signature,makeRequestId());
     return keys.current.get(signature)!;
   }
   function reload(){setRevision(value=>value+1);onSaved();}

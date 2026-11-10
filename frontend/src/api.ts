@@ -1,4 +1,11 @@
 export type Row = Record<string, any>;
+export function makeRequestId(){
+  // getRandomValues also works on browsers that do not implement randomUUID.
+  const bytes=crypto.getRandomValues(new Uint8Array(16));
+  bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=Array.from(bytes,value=>value.toString(16).padStart(2,'0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
 let csrfToken = '';
 export function setCSRF(value: string) {csrfToken = value || '';}
 export class ApiError extends Error {status: number; code: string; requestId: string; constructor(status:number, data:Row){super(data.message || data.detail || `Yêu cầu thất bại (${status})`);this.status=status;this.code=data.code || '';this.requestId=data.request_id || '';}}
