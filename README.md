@@ -164,3 +164,7 @@ python -m worker.main importer
 ```
 
 Đây là phương án local đã kiểm tra qua HTTP, không thay reverse proxy/HTTPS trong vận hành. Lịch vẫn thuộc tiến trình máy chủ, không thuộc tab trình duyệt. Cách này hữu ích khi môi trường thử không đủ dung lượng chạy toàn bộ Compose bằng storage driver `vfs`.
+
+## Bản test public không cần đăng nhập
+
+`https://traceq-public-test-m2sk.onrender.com` dùng dữ liệu mẫu chung. Runner `scripts/run_public.py` bật truy cập khách khi `ENVIRONMENT=demo`: mở trang sẽ cấp phiên/CSRF riêng cho trình duyệt mà không yêu cầu mật khẩu. Khách dùng chung vai trò quản trị demo và có thể sửa dữ liệu mẫu; audit ghi tài khoản `public.guest`, không xác định danh tính người thật. Đặt `PUBLIC_DEMO_ACCESS=false` để yêu cầu đăng nhập lại. Chế độ này không tự bật trong cấu hình production hoặc Compose thông thường.

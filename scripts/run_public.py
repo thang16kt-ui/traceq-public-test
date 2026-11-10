@@ -32,6 +32,7 @@ def configure():
     os.environ['COOKIE_SECURE'] = 'true'
     os.environ.setdefault('DATA_DIR', '/data')
     os.environ.setdefault('ENVIRONMENT', 'demo')
+    os.environ.setdefault('PUBLIC_DEMO_ACCESS', 'true' if os.environ['ENVIRONMENT']=='demo' else 'false')
     Path(os.environ['DATA_DIR']).mkdir(parents=True, exist_ok=True)
     return int(os.getenv('PORT', '8000'))
 

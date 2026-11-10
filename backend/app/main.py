@@ -84,7 +84,7 @@ def login(data:LoginIn,request:Request,response:Response,db:Session=Depends(get_
 
 @app.get(PREFIX+'/auth/me',tags=['Phiên'])
 def me(request:Request,user:User=Depends(current_user)):
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT}
+    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if public_demo_access() else 'authenticated'}
 
 @app.post(PREFIX+'/auth/logout',tags=['Phiên'])
 def logout(request:Request,response:Response,user:User=Depends(current_user),db:Session=Depends(get_db)):
