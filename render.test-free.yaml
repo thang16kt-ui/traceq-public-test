@@ -1,0 +1,34 @@
+# Temporary public test only: Render free service may sleep and local files are ephemeral.
+services:
+- type: web
+  name: traceq-public-test
+  runtime: docker
+  region: singapore
+  plan: free
+  dockerfilePath: ./deploy/public.Dockerfile
+  dockerContext: .
+  autoDeployTrigger: 'off'
+  healthCheckPath: /health/ready
+  envVars:
+  - key: DATABASE_URL
+    fromDatabase:
+      name: traceq-public-test-db
+      property: connectionString
+  - key: ENVIRONMENT
+    value: demo
+  - key: SEED_DEMO
+    value: 'true'
+  - key: DEMO_PASSWORD
+    sync: false
+  - key: DATA_DIR
+    value: /tmp/traceq-test
+  - key: COOKIE_SECURE
+    value: 'true'
+databases:
+- name: traceq-public-test-db
+  databaseName: traceq_public_demo
+  region: singapore
+  plan: free
+  diskSizeGB: 1
+  postgresMajorVersion: '17'
+  ipAllowList: []
