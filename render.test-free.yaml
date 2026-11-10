@@ -29,6 +29,5 @@ databases:
   databaseName: traceq_public_demo
   region: singapore
   plan: free
-  diskSizeGB: 1
   postgresMajorVersion: '17'
   ipAllowList: []
