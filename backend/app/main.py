@@ -75,21 +75,26 @@ def login(data:LoginIn,request:Request,response:Response,db:Session=Depends(get_
     advisory_lock(db,'login:'+address)
     attempts=db.scalar(select(func.count()).select_from(LoginAttempt).where(LoginAttempt.address==address,LoginAttempt.attempted_at>now()-timedelta(minutes=5)))
     if attempts>=20: raise ApiError(429,'RATE_LIMITED','Quá nhiều lần đăng nhập; thử lại sau 5 phút')
-    user=db.scalar(select(User).where(User.username==data.username))
-    if not user or not user.is_active or not verify_password(data.password,user.password_hash):
-        db.add(LoginAttempt(address=address)); db.commit()
-        raise ApiError(401,'INVALID_CREDENTIALS','Tên đăng nhập hoặc mật khẩu không đúng')
+    demo_entry=request.url.path.endswith('/catalog-login') and demo_catalog_login()
+    if demo_entry:
+        user=demo_catalog_user(db)
+    else:
+        user=db.scalar(select(User).where(User.username==data.username))
+        if not user or not user.is_active or not verify_password(data.password,user.password_hash):
+            db.add(LoginAttempt(address=address)); db.commit()
+            raise ApiError(401,'INVALID_CREDENTIALS','Tên đăng nhập hoặc mật khẩu không đúng')
     if request.url.path.endswith('/catalog-login'): catalog_manager(user)
     raw=secrets.token_urlsafe(40); csrf=secrets.token_urlsafe(32)
     db.add(AuthSession(token_hash=token_hash(raw),user_id=user.id,csrf_token=csrf,expires_at=now()+timedelta(hours=SESSION_HOURS)))
-    audit(db,user,'login','users',user.id,{},request.state.request_id)
+    audit(db,user,'public_catalog_login' if demo_entry else 'login','users',user.id,{},request.state.request_id,
+          'Bản test public: mật khẩu bất kỳ; danh tính quản lý dùng chung' if demo_entry else None)
     db.commit()
     response.set_cookie('session',raw,max_age=SESSION_HOURS*3600,httponly=True,secure=COOKIE_SECURE,samesite='lax',path='/')
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':csrf,'environment':ENVIRONMENT,'access_mode':'authenticated'}
+    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':csrf,'environment':ENVIRONMENT,'access_mode':'authenticated','catalog_demo_login':demo_catalog_login()}
 
 @app.get(PREFIX+'/auth/me',tags=['Phiên'])
 def me(request:Request,user:User=Depends(current_user)):
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if user.username=='public.guest' and public_demo_access() else 'authenticated'}
+    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if user.username=='public.guest' and public_demo_access() else 'authenticated','catalog_demo_login':demo_catalog_login()}
 
 @app.post(PREFIX+'/auth/logout',tags=['Phiên'])
 def logout(request:Request,response:Response,user:User=Depends(current_user),db:Session=Depends(get_db)):

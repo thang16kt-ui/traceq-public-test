@@ -7,6 +7,7 @@ from backend.app import auth
 from backend.app.main import app
 from backend.app.db import SessionLocal
 from backend.app.models import User, AuthSession, AuditLog
+import pytest
 
 
 def enable(monkeypatch):
@@ -69,3 +70,48 @@ def test_default_mode_keeps_login_required(monkeypatch):
     monkeypatch.setattr(auth,'ENVIRONMENT','demo')
     with TestClient(app) as c:
         assert c.get('/api/v1/auth/me').status_code==401
+
+
+def test_any_password_catalog_entry_uses_shared_test_manager_not_real_account(monkeypatch,seed):
+    enable(monkeypatch)
+    monkeypatch.setattr(auth,'PUBLIC_DEMO_CATALOG_LOGIN',True)
+    with SessionLocal() as db:
+        original=db.get(User,seed['users']['admin_test']).password_hash
+    with TestClient(app) as client:
+        assert client.get('/api/v1/auth/me').json()['catalog_demo_login'] is True
+        for password in ['1','mật khẩu gì cũng được','  ']:
+            response=client.post('/api/v1/auth/catalog-login',json={'username':'admin_test','password':password})
+            assert response.status_code==200,response.text
+            data=response.json()
+            assert data['user']['username']=='public.catalog' and data['user']['role']=='manager'
+            assert data['user']['id']!=seed['users']['admin_test']
+        assert client.post('/api/v1/product-types',json={'sku':'PUBLIC','name':'Thử danh mục'}).status_code==403
+        client.headers.update({'X-CSRF-Token':data['csrf_token'],'Origin':'http://testserver'})
+        created=client.post('/api/v1/product-types',json={'sku':'PUBLIC','name':'Thử danh mục'},headers={'Idempotency-Key':str(uuid.uuid4())})
+        assert created.status_code==201,created.text
+        assert client.get('/api/v1/auth/me').json()['user']['username']=='public.catalog'
+        monkeypatch.setattr(auth,'PUBLIC_DEMO_CATALOG_LOGIN',False)
+        assert client.get('/api/v1/auth/me').json()['user']['username']=='public.guest'
+    with SessionLocal() as db:
+        assert db.get(User,seed['users']['admin_test']).password_hash==original
+
+
+@pytest.mark.parametrize('environment,public_access,catalog_login',[
+    ('production',True,True),('demo',False,True),('demo',True,False),
+])
+def test_any_password_is_disabled_without_all_public_test_flags(monkeypatch,environment,public_access,catalog_login):
+    monkeypatch.setattr(auth,'ENVIRONMENT',environment)
+    monkeypatch.setattr(auth,'PUBLIC_DEMO_ACCESS',public_access)
+    monkeypatch.setattr(auth,'PUBLIC_DEMO_CATALOG_LOGIN',catalog_login)
+    with TestClient(app) as client:
+        response=client.post('/api/v1/auth/catalog-login',json={'username':'unknown','password':'anything'})
+        assert response.status_code==401
+    with SessionLocal() as db:
+        assert not db.scalar(select(User).where(User.username=='public.catalog'))
+
+
+def test_public_catalog_mode_does_not_bypass_normal_login(monkeypatch,seed):
+    enable(monkeypatch);monkeypatch.setattr(auth,'PUBLIC_DEMO_CATALOG_LOGIN',True)
+    with TestClient(app) as client:
+        assert client.post('/api/v1/auth/login',json={'username':'admin_test','password':'anything'}).status_code==401
+        assert client.post('/api/v1/auth/catalog-login',json={'username':'x','password':'anything'},headers={'Origin':'https://other.example'}).status_code==403
