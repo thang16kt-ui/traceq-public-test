@@ -1,0 +1,108 @@
+name: traceq
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: deploy/backend.Dockerfile
+  image: traceq-app:local
+  environment: &app-env
+    DATABASE_URL: postgresql+psycopg://traceq_app:${APP_DATABASE_PASSWORD:?Run scripts/configure.py first}@db:5432/${POSTGRES_DB:-traceq}
+    DATA_DIR: /data
+    APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ENVIRONMENT: ${ENVIRONMENT:-development}
+    SESSION_HOURS: ${SESSION_HOURS:-12}
+  volumes:
+    - exchange:/data
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  init: true
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  db:
+    image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+    environment:
+      POSTGRES_USER: traceq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/configure.py first}
+      POSTGRES_APP_PASSWORD: ${APP_DATABASE_PASSWORD:?Run scripts/configure.py first}
+      POSTGRES_DB: ${POSTGRES_DB:-traceq}
+    volumes:
+      - database:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U traceq -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    shm_size: 128mb
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    image: traceq-app:local
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgresql+psycopg://traceq:${POSTGRES_PASSWORD:?Run scripts/configure.py first}@db:5432/${POSTGRES_DB:-traceq}
+    command: [python, -m, backend.app.cli, migrate]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+  api:
+    <<: *app
+    command: [uvicorn, backend.app.main:app, --host, 0.0.0.0, --port, '8000', --no-access-log]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  worker:
+    <<: *app
+    command: [python, -m, worker.main, worker]
+  scheduler:
+    <<: *app
+    command: [python, -m, worker.main, scheduler]
+  importer:
+    <<: *app
+    command: [python, -m, worker.main, importer]
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    ports:
+      - '127.0.0.1:${HTTP_PORT:-8080}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+  caddy:
+    image: caddy:2.10.2-alpine
+    profiles: [https]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  database:
+  exchange:
+  caddy_data:
+  caddy_config:

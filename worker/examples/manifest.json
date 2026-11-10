@@ -1,0 +1,123 @@
+{
+  "cohort_rule": "inspection_sessions.started_at >= period_start AND < period_end; all related cases and children including drafts/cancelled",
+  "csv_encoding": "UTF-8-BOM",
+  "csv_text_escape": "apostrophe-prefix-v1",
+  "cutoff_at": "2026-11-10T17:00:00+07:00",
+  "export_id": "00000000-0000-4000-8000-000000000001",
+  "files": [
+    {
+      "columns": [
+        "id",
+        "batch_id",
+        "line",
+        "shift",
+        "stage",
+        "inspected_count",
+        "sample_method",
+        "population_key",
+        "product_type_id",
+        "sku",
+        "product_name",
+        "lot_code",
+        "started_at",
+        "ended_at",
+        "status",
+        "created_at",
+        "updated_at",
+        "row_version"
+      ],
+      "name": "inspection_sessions.csv",
+      "rows": 0,
+      "sha256": "62a792be0ec053224964ff14b12b050f42853b088bed2cccd4e49d9a06f03cde",
+      "table": "inspection_sessions"
+    },
+    {
+      "columns": [
+        "id",
+        "unit_id",
+        "inspection_session_id",
+        "status",
+        "detected_at",
+        "first_confirmed_at",
+        "created_by",
+        "assigned_to",
+        "result",
+        "serial_number",
+        "product_type_id",
+        "sku",
+        "product_name",
+        "lot_code",
+        "created_at",
+        "updated_at",
+        "row_version"
+      ],
+      "name": "defect_cases.csv",
+      "rows": 0,
+      "sha256": "52f06b0e2324e5f525f0a0660d7107a5c8588088a76c9df03cd2493d3428e110",
+      "table": "defect_cases"
+    },
+    {
+      "columns": [
+        "id",
+        "case_id",
+        "defect_type_id",
+        "code",
+        "name",
+        "occurrence_count",
+        "severity",
+        "suspected_cause",
+        "verified_cause",
+        "created_at",
+        "updated_at",
+        "row_version"
+      ],
+      "name": "case_defects.csv",
+      "rows": 0,
+      "sha256": "01f9c89c3129597337c39dd8452bd7339d534876941ebf7518820679deba411d",
+      "table": "case_defects"
+    },
+    {
+      "columns": [
+        "id",
+        "case_id",
+        "category",
+        "amount",
+        "currency",
+        "cost_status",
+        "source_reference",
+        "created_at",
+        "updated_at",
+        "row_version"
+      ],
+      "name": "cost_entries.csv",
+      "rows": 0,
+      "sha256": "52ca70b738b5d43adec12e3b40a53891e23f8fb352baa600ddc28312e5f73cd7",
+      "table": "cost_entries"
+    },
+    {
+      "columns": [
+        "id",
+        "cost_entry_id",
+        "case_defect_id",
+        "allocated_amount",
+        "created_at",
+        "updated_at",
+        "row_version"
+      ],
+      "name": "cost_allocations.csv",
+      "rows": 0,
+      "sha256": "df6c21c7c9ace884fef45805f187a6c5b053f86047332b80431b3e7f6cdae94f",
+      "table": "cost_allocations"
+    }
+  ],
+  "null_encoding": "empty-cell",
+  "period_end": "2026-11-10T00:00:00+07:00",
+  "period_start": "2026-11-09T00:00:00+07:00",
+  "revision": 1,
+  "schema_version": "1.0",
+  "scope": {
+    "line": "MINH-HOA-KHONG-DUNG-VAN-HANH"
+  },
+  "snapshot_mode": "full",
+  "timezone": "Asia/Ho_Chi_Minh"
+}

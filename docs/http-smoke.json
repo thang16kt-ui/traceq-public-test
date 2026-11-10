@@ -1,0 +1,30 @@
+{
+  "runner": "host uvicorn + built React + real PostgreSQL17.11, HTTP loopback",
+  "initial": {
+    "inspected": 100,
+    "defective": 8,
+    "occurrences": 12,
+    "rate": 8
+  },
+  "after_confirmation": {
+    "inspected": 100,
+    "defective": 9,
+    "occurrences": 13,
+    "rate": 9
+  },
+  "checks": [
+    "frontend HTML200",
+    "health live/ready200",
+    "OpenAPI200",
+    "session cookie + CSRF",
+    "QR landing GET read-only",
+    "PNG/PDF labels",
+    "HTTP idempotency replay",
+    "export202 -> durable worker -> succeeded",
+    "download SHA-256 matches",
+    "importer -> mirror100/9/13"
+  ],
+  "export_run_id": "ada691fb-3b2f-43af-94bc-861b38484180",
+  "export_sha256": "8b6b722640fc4e6c8f25f7b0da1e0234f7803b0a22325869a06bc1352ce829ce",
+  "recorded_at": "2026-11-10T04:12:36.971119+00:00"
+}

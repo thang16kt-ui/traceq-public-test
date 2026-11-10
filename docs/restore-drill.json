@@ -1,0 +1,42 @@
+{
+  "recorded_at": "2026-11-10T04:13:49.543565+00:00",
+  "database": "PostgreSQL17.11",
+  "restore_method": "pg_dump -Fc / pg_restore --no-owner --no-privileges into new isolated DB; app stopped before DB/file backup",
+  "table_counts": {
+    "users": 2,
+    "auth_sessions": 1,
+    "login_attempts": 0,
+    "product_types": 1,
+    "batches": 1,
+    "units": 10,
+    "inspection_sessions": 1,
+    "defect_types": 3,
+    "defect_cases": 10,
+    "case_defects": 10,
+    "case_events": 11,
+    "cost_entries": 4,
+    "cost_allocations": 4,
+    "attachments": 0,
+    "scan_events": 1,
+    "idempotency_records": 2,
+    "audit_logs": 4,
+    "export_schedules": 0,
+    "export_runs": 1,
+    "import_runs": 1,
+    "analysis_records": 29,
+    "schema_migrations": 1
+  },
+  "all_table_hashes_equal": true,
+  "file_count": 3,
+  "all_file_hashes_equal": true,
+  "restored_http_checks": [
+    "health ready200",
+    "existing account login200",
+    "summary100/9/13",
+    "historical export download SHA-256 unchanged"
+  ],
+  "limits": [
+    "Owner connection used for data restore; this drill does not validate production runtime-role provisioning or public TLS.",
+    "Small labeled demo dataset, not 100k-record backup performance."
+  ]
+}

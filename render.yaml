@@ -1,0 +1,39 @@
+# Planned public test infrastructure. Applying this file creates paid resources.
+# Review Render's actual plan and price before approving the Blueprint.
+services:
+  - type: web
+    name: traceq-public-test
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    dockerfilePath: ./deploy/public.Dockerfile
+    dockerContext: .
+    autoDeployTrigger: 'off'
+    healthCheckPath: /health/ready
+    disk:
+      name: traceq-test-files
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: traceq-public-test-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: demo
+      - key: SEED_DEMO
+        value: 'true'
+      - key: DEMO_PASSWORD
+        generateValue: true
+      - key: DATA_DIR
+        value: /data
+      - key: COOKIE_SECURE
+        value: 'true'
+databases:
+  - name: traceq-public-test-db
+    databaseName: traceq_public_demo
+    region: singapore
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    postgresMajorVersion: '17'
+    ipAllowList: []

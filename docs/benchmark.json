@@ -1,0 +1,48 @@
+{
+  "recorded_at": "2026-11-10T04:06:36.552799+00:00",
+  "database": "PostgreSQL 17.11",
+  "host": {
+    "logical_cpus_reported": 3,
+    "cgroup_cpu_max": "200000 100000",
+    "cgroup_memory_max_bytes": "8589934592"
+  },
+  "dataset": {
+    "defect_cases": 100000,
+    "physical_units": 100000,
+    "case_defects": 100000,
+    "inspection_sessions": 2,
+    "cost_entries": 0,
+    "seed_seconds": 20.719,
+    "method": "SQLAlchemy bulk insert; isolated benchmark database"
+  },
+  "confirmation": {
+    "measurement": "ASGI TestClient wall latency including Python/ASGI/PostgreSQL; no HTTP network/TLS/phone",
+    "concurrent_requests": 30,
+    "request_count": 30,
+    "successful": 30,
+    "batch_seconds": 1.402,
+    "p50_ms": 1113.97,
+    "p95_ms": 1321.31,
+    "max_ms": 1326.58
+  },
+  "export": {
+    "format": "CSV UTF-8 BOM in ZIP",
+    "case_count": 10000,
+    "seconds": 2.352,
+    "includes": "claim + repeatable-read snapshot + immutable file + SHA-256/self-validation + incoming publication + completion commit",
+    "row_counts": {
+      "inspection_sessions": 1,
+      "defect_cases": 10000,
+      "case_defects": 10000,
+      "cost_entries": 0,
+      "cost_allocations": 0
+    },
+    "zip_bytes": 966811
+  },
+  "limits": [
+    "One trial, synthetic data, no photos/costs; not a production SLO.",
+    "No thirty-phone, proxy/HTTPS, slow network or physical QR/camera test.",
+    "TestClient measurements do not isolate server handler duration.",
+    "Scheduler due detection <=60s not measured by this script."
+  ]
+}
