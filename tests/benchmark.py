@@ -18,6 +18,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 import uuid
+from backend.app.catalog_keys import catalog_key
 
 
 def main():
@@ -65,9 +66,9 @@ def main():
     seed_started = time.perf_counter()
     with engine.begin() as connection:
         connection.execute(insert(m.User), [{**base,'id':actor, 'username':'benchmark', 'display_name':'BENCHMARK ONLY', 'role':'admin','password_hash':hash_password(password),'is_active':True}])
-        connection.execute(insert(m.ProductType), [{**base,'id':product,'sku':'BENCH-ONLY','name':'Dữ liệu đo tải riêng','unit_of_measure':'cái'}])
-        connection.execute(insert(m.Batch), [{**base,'id':batch,'product_type_id':product,'lot_code':'BENCHMARK'}])
-        connection.execute(insert(m.DefectType), [{**base,'id':kind,'code':'BENCH-D','name':'Lỗi kiểm thử','severity_default':'medium','is_active':True}])
+        connection.execute(insert(m.ProductType), [{**base,'id':product,'sku':'BENCH-ONLY','name':'Dữ liệu đo tải riêng','unit_of_measure':'cái','sku_key':catalog_key('BENCH-ONLY'),'name_key':catalog_key('Dữ liệu đo tải riêng')}])
+        connection.execute(insert(m.Batch), [{**base,'id':batch,'product_type_id':product,'lot_code':'BENCHMARK','lot_key':catalog_key('BENCHMARK')}])
+        connection.execute(insert(m.DefectType), [{**base,'id':kind,'code':'BENCH-D','name':'Lỗi kiểm thử','severity_default':'medium','is_active':True,'code_key':catalog_key('BENCH-D'),'name_key':catalog_key('Lỗi kiểm thử')}])
         connection.execute(insert(m.InspectionSession), [
             {**base,'id':export_session,'batch_id':batch,'line':'BENCH','shift':'1','stage':'Final','inspected_count':args.export_records,'sample_method':'all','population_key':'BENCH-EXPORT','started_at':export_start+timedelta(hours=1),'status':'open','created_by':actor},
             {**base,'id':other_session,'batch_id':batch,'line':'BENCH','shift':'2','stage':'Final','inspected_count':args.records-args.export_records,'sample_method':'all','population_key':'BENCH-OTHER','started_at':other_start+timedelta(hours=1),'status':'open','created_by':actor},

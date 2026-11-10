@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from fastapi import Request
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from .auth import ApiError, case_access
 from .models import *
 
@@ -69,6 +69,10 @@ def case_detail(db,obj):
 def bump(obj):
     obj.row_version+=1; obj.updated_at=now()
 
+def mark_catalog_used(db, model, identity):
+    db.execute(update(model).where(model.id==identity, model.has_been_used==False)
+               .values(has_been_used=True, row_version=model.row_version+1, updated_at=now()))
+
 def replace_defects(db,case,defects,user):
     ids=[str(d.defect_type_id) for d in defects]
     if len(set(ids)) != len(ids): raise ApiError(422,'DUPLICATE_DEFECT','Loại lỗi không được trùng')
@@ -81,7 +85,8 @@ def replace_defects(db,case,defects,user):
     for item in defects:
         values=item.model_dump(mode='json'); type_id=values['defect_type_id']
         t=db.get(DefectType,type_id)
-        if not t or not t.is_active: raise ApiError(422,'INVALID_DEFECT_TYPE','Loại lỗi không hợp lệ hoặc ngừng sử dụng')
+        if not t or (not t.is_active and type_id not in current): raise ApiError(422,'INVALID_DEFECT_TYPE','Loại lỗi không hợp lệ hoặc ngừng sử dụng')
+        mark_catalog_used(db, DefectType, type_id)
         if item.verified_cause and user.role=='inspector': raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
         if type_id in current:
             d=current[type_id]

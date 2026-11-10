@@ -12,23 +12,31 @@ from .config import DATABASE_URL, ENVIRONMENT
 from .db import engine, SessionLocal
 from .models import *
 from .services import advisory_lock
+from .migrations import SCHEMA_VERSION, approved_retirements, catalog_backfill
 
 def migrate():
-    path=Path(__file__).resolve().parents[2]/'migrations'/'001_initial.sql'
+    directory=Path(__file__).resolve().parents[2]/'migrations'
     with engine.begin() as connection:
         connection.execute(text('SELECT pg_advisory_xact_lock(71019301)'))
         exists=connection.execute(text("SELECT to_regclass('public.schema_migrations')")).scalar()
-        already_applied=exists and connection.execute(text("SELECT 1 FROM schema_migrations WHERE version='001'")).scalar()
-        if not already_applied:
+        applied=set(connection.execute(text('SELECT version FROM schema_migrations')).scalars()) if exists else set()
+        for path in sorted(directory.glob('[0-9][0-9][0-9]_*.sql')):
+            version=path.name.split('_',1)[0]
+            if version in applied: continue
+            if version=='002':
+                connection.execute(text('LOCK TABLE product_types, batches, defect_types IN ACCESS EXCLUSIVE MODE'))
+                approved_retirements(connection)
+                catalog_backfill(connection)  # abort before DDL on duplicate names/codes
             connection.exec_driver_sql(path.read_text())
-            connection.execute(text("INSERT INTO schema_migrations(version,applied_at) VALUES ('001',CURRENT_TIMESTAMP)"))
+            if version=='002': catalog_backfill(connection,apply=True)
+            connection.execute(text('INSERT INTO schema_migrations(version,applied_at) VALUES (:version,CURRENT_TIMESTAMP)'),{'version':version})
         role_exists=connection.execute(text("SELECT 1 FROM pg_roles WHERE rolname='traceq_app'")).scalar()
         if role_exists:
             connection.execute(text('GRANT USAGE ON SCHEMA public TO traceq_app'))
             connection.execute(text('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO traceq_app'))
             connection.execute(text('REVOKE UPDATE,DELETE,TRUNCATE ON audit_logs FROM traceq_app'))
             connection.execute(text('REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON schema_migrations FROM traceq_app'))
-    print('Schema 001 ready; runtime grants reconciled')
+    print(f'Schema {SCHEMA_VERSION} ready; runtime grants reconciled')
 
 def create_user(username,display_name,role,password_env=None):
     password=os.getenv(password_env,'') if password_env else getpass.getpass('Mật khẩu (ít nhất 12 ký tự): ')

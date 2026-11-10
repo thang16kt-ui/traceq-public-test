@@ -6,6 +6,2003 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/product-types": {
+      "get": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Products",
+        "operationId": "products_api_v1_product_types_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "inactive",
+                "all"
+              ],
+              "type": "string",
+              "default": "active",
+              "title": "State"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-roles": [
+          "inspector",
+          "manager",
+          "admin"
+        ]
+      },
+      "post": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Product Create",
+        "operationId": "product_create_api_v1_product_types_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ]
+      }
+    },
+    "/api/v1/batches": {
+      "get": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Batches",
+        "operationId": "batches_api_v1_batches_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "inactive",
+                "all"
+              ],
+              "type": "string",
+              "default": "active",
+              "title": "State"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-roles": [
+          "inspector",
+          "manager",
+          "admin"
+        ]
+      },
+      "post": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Batch Create",
+        "operationId": "batch_create_api_v1_batches_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ]
+      }
+    },
+    "/api/v1/defect-types": {
+      "get": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Defects",
+        "operationId": "defects_api_v1_defect_types_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "inactive",
+                "all"
+              ],
+              "type": "string",
+              "default": "active",
+              "title": "State"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-required-roles": [
+          "inspector",
+          "manager",
+          "admin"
+        ]
+      },
+      "post": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Defect Create",
+        "operationId": "defect_create_api_v1_defect_types_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefectTypeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ]
+      }
+    },
+    "/api/v1/product-types/{catalog_id}": {
+      "patch": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Product Edit",
+        "operationId": "product_edit_api_v1_product_types__catalog_id__patch",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/batches/{catalog_id}": {
+      "patch": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Batch Edit",
+        "operationId": "batch_edit_api_v1_batches__catalog_id__patch",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/defect-types/{catalog_id}": {
+      "patch": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Defect Edit",
+        "operationId": "defect_edit_api_v1_defect_types__catalog_id__patch",
+        "parameters": [
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefectTypeEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/{kind}/{catalog_id}": {
+      "delete": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Catalog Delete",
+        "operationId": "catalog_delete_api_v1__kind___catalog_id__delete",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "product-types",
+                "batches",
+                "defect-types"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/{kind}/{catalog_id}/restore": {
+      "post": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Catalog Restore",
+        "operationId": "catalog_restore_api_v1__kind___catalog_id__restore_post",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "product-types",
+                "batches",
+                "defect-types"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/{kind}/{catalog_id}/history": {
+      "get": {
+        "tags": [
+          "Danh mục"
+        ],
+        "summary": "Catalog History",
+        "operationId": "catalog_history_api_v1__kind___catalog_id__history_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "product-types",
+                "batches",
+                "defect-types"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "catalog_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Catalog Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-excludes-public-guest": true,
+        "x-required-roles": [
+          "manager",
+          "admin"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [
@@ -51,6 +2048,132 @@
         ],
         "summary": "Login",
         "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Dữ liệu không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Dữ liệu không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Chưa đăng nhập hoặc phiên hết hạn",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy trong phạm vi được phép",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Không tìm thấy trong phạm vi được phép",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Xung đột idempotency/phiên bản/trạng thái",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "VERSION_CONFLICT",
+                  "message": "Xung đột idempotency/phiên bản/trạng thái",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vượt giới hạn tần suất",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                },
+                "example": {
+                  "code": "REQUEST_REJECTED",
+                  "message": "Vượt giới hạn tần suất",
+                  "field_errors": {},
+                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
+                }
+              }
+            }
+          }
+        },
+        "x-required-roles": []
+      }
+    },
+    "/api/v1/auth/catalog-login": {
+      "post": {
+        "tags": [
+          "Phiên"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_auth_catalog_login_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -427,915 +2550,6 @@
               "type": "string"
             },
             "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
-          }
-        ]
-      }
-    },
-    "/api/v1/product-types": {
-      "get": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Products",
-        "operationId": "products_api_v1_product_types_get",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 50,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "inspector",
-          "manager",
-          "admin"
-        ]
-      },
-      "post": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Product Create",
-        "operationId": "product_create_api_v1_product_types_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProductIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
-          }
-        ]
-      }
-    },
-    "/api/v1/defect-types": {
-      "get": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Defects",
-        "operationId": "defects_api_v1_defect_types_get",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 100,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "inspector",
-          "manager",
-          "admin"
-        ]
-      },
-      "post": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Defect Create",
-        "operationId": "defect_create_api_v1_defect_types_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DefectTypeIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
-          }
-        ]
-      }
-    },
-    "/api/v1/batches": {
-      "get": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Batches",
-        "operationId": "batches_api_v1_batches_get",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "page_size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 100,
-              "title": "Page Size"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "inspector",
-          "manager",
-          "admin"
-        ]
-      },
-      "post": {
-        "tags": [
-          "Danh mục"
-        ],
-        "summary": "Batch Create",
-        "operationId": "batch_create_api_v1_batches_post",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BatchIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Dữ liệu không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Dữ liệu không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Chưa đăng nhập hoặc phiên hết hạn",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Chưa đăng nhập hoặc phiên hết hạn",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không đủ quyền hoặc CSRF/origin không hợp lệ",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Không tìm thấy trong phạm vi được phép",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Không tìm thấy trong phạm vi được phép",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Xung đột idempotency/phiên bản/trạng thái",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "VERSION_CONFLICT",
-                  "message": "Xung đột idempotency/phiên bản/trạng thái",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Vượt giới hạn tần suất",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                },
-                "example": {
-                  "code": "REQUEST_REJECTED",
-                  "message": "Vượt giới hạn tần suất",
-                  "field_errors": {},
-                  "request_id": "7b3e7f3c-28bb-4d7d-89b5-190a1f633a28"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "SessionCookie": []
-          }
-        ],
-        "x-required-roles": [
-          "admin"
-        ],
-        "parameters": [
-          {
-            "name": "X-CSRF-Token",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "csrf_token trả về từ đăng nhập hoặc /auth/me"
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "description": "Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409"
           }
         ]
       }
@@ -6607,6 +7821,41 @@
         ],
         "title": "AllocationIn"
       },
+      "BatchEdit": {
+        "properties": {
+          "row_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "product_type_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Type Id"
+          },
+          "lot_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Lot Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_version",
+          "reason",
+          "product_type_id",
+          "lot_code"
+        ],
+        "title": "BatchEdit"
+      },
       "BatchIn": {
         "properties": {
           "product_type_id": {
@@ -6800,6 +8049,28 @@
         ],
         "title": "CasePatch"
       },
+      "CatalogChange": {
+        "properties": {
+          "row_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_version",
+          "reason"
+        ],
+        "title": "CatalogChange"
+      },
       "ConfirmIn": {
         "properties": {
           "client_event_id": {
@@ -6949,6 +8220,53 @@
         ],
         "title": "DefectIn"
       },
+      "DefectTypeEdit": {
+        "properties": {
+          "row_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "severity_default": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Severity Default",
+            "default": "medium"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_version",
+          "reason",
+          "code",
+          "name"
+        ],
+        "title": "DefectTypeEdit"
+      },
       "DefectTypeIn": {
         "properties": {
           "code": {
@@ -7077,6 +8395,49 @@
           "password"
         ],
         "title": "LoginIn"
+      },
+      "ProductEdit": {
+        "properties": {
+          "row_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Row Version"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "sku": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sku"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "unit_of_measure": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Unit Of Measure",
+            "default": "cái"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "row_version",
+          "reason",
+          "sku",
+          "name"
+        ],
+        "title": "ProductEdit"
       },
       "ProductIn": {
         "properties": {

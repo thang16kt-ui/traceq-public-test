@@ -40,6 +40,21 @@ class DefectTypeIn(Input):
     severity_default: Literal['low','medium','high','critical'] = 'medium'
     is_active: bool = True
 
+class CatalogChange(Input):
+    row_version: int = Field(ge=1)
+    reason: str = Field(min_length=3,max_length=2000)
+
+class ProductEdit(ProductIn, CatalogChange): pass
+
+class BatchEdit(BatchIn, CatalogChange): pass
+
+class DefectTypeEdit(Input):
+    row_version: int = Field(ge=1)
+    reason: str = Field(min_length=3,max_length=2000)
+    code: str = Field(min_length=1,max_length=80)
+    name: str = Field(min_length=1,max_length=160)
+    severity_default: Literal['low','medium','high','critical'] = 'medium'
+
 class SessionIn(Input):
     batch_id: UUID
     line: str = Field(min_length=1,max_length=80)

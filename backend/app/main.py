@@ -16,9 +16,11 @@ from sqlalchemy.orm import Session
 from .auth import *
 from .config import APP_ORIGIN, COOKIE_SECURE, DATA_DIR, ENVIRONMENT, SESSION_HOURS
 from .db import engine, get_db
+from .migrations import SCHEMA_VERSION
+from .catalogs import router as catalog_router, catalog_lock, active_batch, catalog_manager
 from .models import *
 from .schemas import *
-from .services import advisory_lock, audit, bump, case_detail, get_case, payload_hash, plain, replace_defects, row, write
+from .services import advisory_lock, audit, bump, case_detail, get_case, mark_catalog_used, payload_hash, plain, replace_defects, row, write
 
 logger=logging.getLogger('quality')
 logger.setLevel(logging.INFO)
@@ -27,6 +29,7 @@ if not logger.handlers:
 logger.propagate=False
 app=FastAPI(title='TraceQ — Quản lý chất lượng bằng QR',version='1.0.0',description='MVP PostgreSQL. Cookie phiên + X-CSRF-Token và Idempotency-Key cho thao tác ghi. Các kỳ dùng cohort đợt kiểm tra [period_start,period_end).')
 PREFIX='/api/v1'
+app.include_router(catalog_router)
 
 @app.middleware('http')
 async def requests(request,call_next):
@@ -61,9 +64,10 @@ def live(): return {'status':'ok'}
 @app.get('/health/ready',tags=['Vận hành'])
 def ready(db:Session=Depends(get_db)):
     db.execute(text('SELECT 1')); version=db.scalar(select(SchemaMigration.version).order_by(SchemaMigration.version.desc()).limit(1))
-    if version!='001': raise ApiError(503,'SCHEMA_NOT_READY','Chưa áp dụng migration')
+    if version!=SCHEMA_VERSION: raise ApiError(503,'SCHEMA_NOT_READY','Chưa áp dụng migration')
     return {'status':'ready','schema_version':version}
 
+@app.post(PREFIX+'/auth/catalog-login',tags=['Phiên'])
 @app.post(PREFIX+'/auth/login',tags=['Phiên'])
 def login(data:LoginIn,request:Request,response:Response,db:Session=Depends(get_db)):
     check_origin(request)
@@ -75,16 +79,17 @@ def login(data:LoginIn,request:Request,response:Response,db:Session=Depends(get_
     if not user or not user.is_active or not verify_password(data.password,user.password_hash):
         db.add(LoginAttempt(address=address)); db.commit()
         raise ApiError(401,'INVALID_CREDENTIALS','Tên đăng nhập hoặc mật khẩu không đúng')
+    if request.url.path.endswith('/catalog-login'): catalog_manager(user)
     raw=secrets.token_urlsafe(40); csrf=secrets.token_urlsafe(32)
     db.add(AuthSession(token_hash=token_hash(raw),user_id=user.id,csrf_token=csrf,expires_at=now()+timedelta(hours=SESSION_HOURS)))
     audit(db,user,'login','users',user.id,{},request.state.request_id)
     db.commit()
     response.set_cookie('session',raw,max_age=SESSION_HOURS*3600,httponly=True,secure=COOKIE_SECURE,samesite='lax',path='/')
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':csrf,'environment':ENVIRONMENT}
+    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':csrf,'environment':ENVIRONMENT,'access_mode':'authenticated'}
 
 @app.get(PREFIX+'/auth/me',tags=['Phiên'])
 def me(request:Request,user:User=Depends(current_user)):
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if public_demo_access() else 'authenticated'}
+    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if user.username=='public.guest' and public_demo_access() else 'authenticated'}
 
 @app.post(PREFIX+'/auth/logout',tags=['Phiên'])
 def logout(request:Request,response:Response,user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -95,32 +100,6 @@ def listing(db,model,page=1,page_size=50,conditions=(),order=None):
     total=db.scalar(select(func.count()).select_from(model).where(*conditions))
     stmt=select(model).where(*conditions).order_by(order or model.created_at.desc()).offset((page-1)*page_size).limit(page_size)
     return {'items':[row(x) for x in db.scalars(stmt)],'total':total,'page':page,'page_size':page_size}
-
-@app.get(PREFIX+'/product-types',tags=['Danh mục'])
-def products(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    return listing(db,ProductType,page,page_size)
-@app.get(PREFIX+'/defect-types',tags=['Danh mục'])
-def defects(page:int=Query(1,ge=1),page_size:int=Query(100,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    return listing(db,DefectType,page,page_size)
-@app.get(PREFIX+'/batches',tags=['Danh mục'])
-def batches(page:int=Query(1,ge=1),page_size:int=Query(100,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    result=listing(db,Batch,page,page_size)
-    for item in result['items']: item['product_type']=row(db.get(ProductType,item['product_type_id']))
-    return result
-
-def catalog_create(data,model,request,user,db):
-    require_role(user,'admin')
-    def action():
-        obj=model(**data.model_dump(mode='json')); db.add(obj); db.flush()
-        audit(db,user,'create',model.__tablename__,obj.id,row(obj),request.state.request_id)
-        return row(obj)
-    return write(db,user,request,data.model_dump(mode='json'),action,201)
-@app.post(PREFIX+'/product-types',status_code=201,tags=['Danh mục'])
-def product_create(data:ProductIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)): return catalog_create(data,ProductType,request,user,db)
-@app.post(PREFIX+'/batches',status_code=201,tags=['Danh mục'])
-def batch_create(data:BatchIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)): return catalog_create(data,Batch,request,user,db)
-@app.post(PREFIX+'/defect-types',status_code=201,tags=['Danh mục'])
-def defect_create(data:DefectTypeIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)): return catalog_create(data,DefectType,request,user,db)
 
 @app.get(PREFIX+'/users',tags=['Quản trị'])
 def users(user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -137,7 +116,9 @@ def sessions(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),user:Use
 @app.post(PREFIX+'/inspection-sessions',status_code=201,tags=['Đợt kiểm tra'])
 def create_session(data:SessionIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     def action():
-        if not db.get(Batch,str(data.batch_id)): raise ApiError(422,'INVALID_BATCH','Lô không tồn tại')
+        catalog_lock(db)
+        active_batch(db, data.batch_id)
+        mark_catalog_used(db, Batch, str(data.batch_id))
         obj=InspectionSession(**data.model_dump(exclude_none=True),created_by=user.id)
         obj.batch_id=str(obj.batch_id); db.add(obj); db.flush()
         audit(db,user,'create','inspection_sessions',obj.id,row(obj),request.state.request_id)
@@ -166,9 +147,11 @@ def patch_session(session_id:uuid.UUID,data:SessionPatch,request:Request,user:Us
 @app.post(PREFIX+'/defect-cases',status_code=201,tags=['Hồ sơ'])
 def create_case(data:CaseIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     def action():
+        catalog_lock(db)
         session=db.scalar(select(InspectionSession).where(InspectionSession.id==str(data.inspection_session_id)).with_for_update().execution_options(populate_existing=True))
         if not session: raise ApiError(422,'INVALID_SESSION','Đợt kiểm tra không tồn tại')
         if session.status!='open': raise ApiError(409,'SESSION_CLOSED','Đợt kiểm tra đã chốt')
+        active_batch(db, session.batch_id)
         advisory_lock(db,f'unit:{session.batch_id}:{data.serial_number}')
         unit=db.scalar(select(Unit).where(Unit.batch_id==session.batch_id,Unit.serial_number==data.serial_number))
         if not unit:
@@ -246,6 +229,7 @@ def confirm(case_id:uuid.UUID,data:ConfirmIn,request:Request,user:User=Depends(c
 def patch_case(case_id:uuid.UUID,data:CasePatch,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     get_case(db,user,case_id)
     def action():
+        catalog_lock(db)
         obj=get_case(db,user,case_id,True)
         if obj.row_version!=data.row_version: raise ApiError(409,'VERSION_CONFLICT','Dữ liệu đã đổi; tải lại trước khi sửa')
         before=case_detail(db,obj)
@@ -452,17 +436,18 @@ def documented_openapi():
     for path,operations in schema['paths'].items():
         for method,operation in operations.items():
             if method not in ('get','post','patch','delete','put'): continue
-            if path.startswith(PREFIX) and path!=PREFIX+'/auth/login': operation['security']=[{'SessionCookie':[]}]
+            if path.startswith(PREFIX) and path not in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'): operation['security']=[{'SessionCookie':[]}]
             if path.startswith(PREFIX):
                 roles=['inspector','manager','admin']
                 if '/analytics/' in path or '/export-runs' in path or '/import-runs' in path or path.endswith('/audit-logs') or path.endswith('/users') or path.endswith('/costs'): roles=['manager','admin']
                 if '/export-schedules' in path: roles=['manager','admin'] if method=='get' else ['admin']
-                if path in (PREFIX+'/product-types',PREFIX+'/batches',PREFIX+'/defect-types') and method=='post': roles=['admin']
+                if (any(path.startswith(PREFIX+'/'+kind) for kind in ('product-types','batches','defect-types')) or '/{kind}/' in path) and (method!='get' or path.endswith('/history')):
+                    roles=['manager','admin']; operation['x-excludes-public-guest']=True
                 if path.startswith(PREFIX+'/inspection-sessions/') and method=='patch': roles=['manager','admin']
-                if path==PREFIX+'/auth/login': roles=[]
+                if path in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'): roles=[]
                 operation['x-required-roles']=roles
                 if '/defect-cases' in path or '/qr/' in path or '/units/' in path or '/attachments/' in path: operation['x-record-scope']='inspector: created_by or assigned_to; manager/admin: all; close/cancel/assign/verify-cause: manager/admin'
-            if method in ('post','patch','delete','put') and path!=PREFIX+'/auth/login':
+            if method in ('post','patch','delete','put') and path not in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'):
                 params=operation.setdefault('parameters',[])
                 if not any(p.get('name')=='X-CSRF-Token' for p in params): params.append({'name':'X-CSRF-Token','in':'header','required':True,'schema':{'type':'string'},'description':'csrf_token trả về từ đăng nhập hoặc /auth/me'})
                 if path!=PREFIX+'/auth/logout' and not any(p.get('name')=='Idempotency-Key' for p in params): params.append({'name':'Idempotency-Key','in':'header','required':True,'schema':{'type':'string','minLength':1,'maxLength':160},'description':'Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409'})

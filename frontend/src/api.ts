@@ -19,6 +19,14 @@ export async function api(path:string, init:RequestInit = {}, key?:string):Promi
   return data;
 }
 export function rows(data:any):Row[]{return Array.isArray(data)?data:data?.items || data?.data || [];}
+export async function allCatalogRows(path:string):Promise<Row[]>{
+  const result:Row[]=[];
+  for(let page=1;;page++){
+    const data=await api(`${path}${path.includes('?')?'&':'?'}page=${page}&page_size=100`);
+    result.push(...rows(data));
+    if(result.length>=data.total || !rows(data).length)return result;
+  }
+}
 export function formatNumber(value:any){return value == null?'—':Number(value).toLocaleString('vi-VN',{maximumFractionDigits:2});}
 export function formatTime(value:any){if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
 export function errorMessage(e:unknown){return e instanceof Error?e.message:'Có lỗi xảy ra. Vui lòng thử lại.';}

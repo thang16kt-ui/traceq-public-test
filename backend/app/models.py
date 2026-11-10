@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
 def uid(): return str(uuid.uuid4())
@@ -42,13 +42,20 @@ class ProductType(Base, Versioned):
     sku = mapped_column(String(80), unique=True, nullable=False)
     name = mapped_column(String(200), nullable=False)
     unit_of_measure = mapped_column(String(40), default='cái', nullable=False)
+    is_active = mapped_column(Boolean, default=True, server_default='true', nullable=False)
+    name_key = mapped_column(Text, unique=True, nullable=False)
+    sku_key = mapped_column(Text, unique=True, nullable=False)
+    has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
 
 class Batch(Base, Versioned):
     __tablename__ = 'batches'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
     product_type_id = mapped_column(ForeignKey('product_types.id'), nullable=False)
     lot_code = mapped_column(String(100), nullable=False)
-    __table_args__ = (UniqueConstraint('product_type_id', 'lot_code'),)
+    is_active = mapped_column(Boolean, default=True, server_default='true', nullable=False)
+    lot_key = mapped_column(Text, nullable=False)
+    has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    __table_args__ = (UniqueConstraint('product_type_id', 'lot_code'), UniqueConstraint('product_type_id', 'lot_key'))
 
 class Unit(Base, Versioned):
     __tablename__ = 'units'
@@ -81,6 +88,20 @@ class DefectType(Base, Versioned):
     name = mapped_column(String(160), nullable=False)
     severity_default = mapped_column(String(20), default='medium', nullable=False)
     is_active = mapped_column(Boolean, default=True, nullable=False)
+    name_key = mapped_column(Text, unique=True, nullable=False)
+    code_key = mapped_column(Text, unique=True, nullable=False)
+    has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+
+
+def set_catalog_keys(mapper, connection, target):
+    from .catalog_keys import KEY_FIELDS, catalog_key
+    for key, source in KEY_FIELDS[target.__tablename__].items():
+        setattr(target, key, catalog_key(getattr(target, source)))
+
+
+for catalog_model in (ProductType, Batch, DefectType):
+    event.listen(catalog_model, 'before_insert', set_catalog_keys)
+    event.listen(catalog_model, 'before_update', set_catalog_keys)
 
 class DefectCase(Base, Versioned):
     __tablename__ = 'defect_cases'
