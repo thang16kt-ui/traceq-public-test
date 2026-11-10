@@ -47,3 +47,11 @@
  .catalog-admin .catalog-dialog{padding:20px 16px}.catalog-error{margin:12px 16px}
  .catalog-form-actions>.btn{flex:1;white-space:normal}.catalog-pagination{flex-wrap:wrap}
 }
+.analysis-product-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end;background:white;border:1px solid #e0e8e5;border-radius:10px;padding:18px;margin:0 0 22px}
+.analysis-product-filters label{display:grid;gap:7px;min-width:0;font-size:14px;font-weight:600}
+.analysis-product-filters select{min-height:48px;font-size:16px;max-width:100%;text-overflow:ellipsis}
+.analysis-product-filters .btn{min-height:48px;white-space:normal}
+.analysis-product-filters p{grid-column:1/-1;font-size:13px;line-height:1.6;color:#60746c}
+.analysis-state{padding:24px;margin-bottom:20px;border:1px solid #e0e8e5;border-radius:10px;background:white;font-size:15px;line-height:1.6}
+.analysis-state .btn{min-height:48px;margin-top:12px}
+@media(max-width:760px){.analysis-product-filters{grid-template-columns:minmax(0,1fr);padding:16px;gap:14px}.analysis-product-filters .btn{width:100%}}

@@ -125,3 +125,48 @@ def test_forecast_returns_reasons_instead_of_invented_prediction(admin):
     assert result['status'] == 'insufficient_data'
     assert result['trained'] is False and result['model_version'] is None
     assert result['reasons'] and result['requirements']
+
+
+def test_product_batch_and_period_scope_all_analysis_views(admin,seed,create_session,create_case,confirm):
+    def create(path,body):
+        response=admin.post('/api/v1/'+path,json=body,headers={'Idempotency-Key':str(uuid.uuid4())})
+        assert response.status_code==201,response.text
+        return response.json()
+    product=create('product-types',{'sku':'FILTER-B','name':'Sản phẩm phân tích B'})
+    a2=create('batches',{'product_type_id':seed['product_type_id'],'lot_code':'A-OLDER'})
+    b1=create('batches',{'product_type_id':product['id'],'lot_code':'B-NEW'})
+    first=create_session(admin,10,started_at='2026-11-10T08:00:00Z')
+    second=create_session(admin,30,batch_id=a2['id'],started_at='2026-10-01T08:00:00Z')
+    third=create_session(admin,100,batch_id=b1['id'],started_at='2026-11-10T08:00:00Z')
+    first_case=create_case(admin,first['id'],occurrences=2);confirm(admin,first_case['id'])
+    for _ in range(2): confirm(admin,create_case(admin,second['id'])['id'])
+    third_case=create_case(admin,third['id'],occurrences=5);confirm(admin,third_case['id'])
+    for case,amount in [(first_case,'10.00'),(third_case,'100.00')]:
+        create('defect-cases/'+case['id']+'/costs',{'category':'repair','amount':amount,'currency':'VND','cost_status':'actual','source_reference':'FILTER-COST','allocations':[{'case_defect_id':case['defects'][0]['id'],'allocated_amount':amount}]})
+    for params,den,num,occ,actual in [
+        ({'product_type_id':seed['product_type_id']},40,3,4,'10.00'),
+        ({'product_type_id':seed['product_type_id'],'batch_id':seed['batch_id']},10,1,2,'10.00'),
+        ({'product_type_id':product['id']},100,1,5,'100.00'),
+        ({'product_type_id':seed['product_type_id'],'period_start':'2026-11-09T00:00:00Z','period_end':'2026-11-11T00:00:00Z'},10,1,2,'10.00'),
+    ]:
+        result=summary(admin,**params)
+        assert (result['denominator'],result['numerator'],result['occurrence_count'])==(den,num,occ)
+        assert result['cost_totals'][0]['actual']==actual
+        pareto=admin.get('/api/v1/analytics/pareto',params=params).json()
+        trends=admin.get('/api/v1/analytics/trends',params=params).json()
+        groups=admin.get('/api/v1/analytics/groups',params={**params,'group_by':'batch'}).json()
+        forecast=admin.get('/api/v1/analytics/forecast',params=params).json()
+        assert sum(item['occurrence_count'] for item in pareto['items'])==occ
+        assert sum(item['numerator'] for item in trends['items'])==num
+        assert sum(item['denominator'] for item in groups['items'])==den
+        assert sum(item['numerator'] for item in groups['items'])==num
+        assert forecast['scope']==result['scope']==pareto['scope']==trends['scope']==groups['scope']
+    mismatch={'product_type_id':product['id'],'batch_id':seed['batch_id']}
+    assert summary(admin,**mismatch)['numerator']==0
+    for view in ['pareto','trends','groups']:
+        assert not admin.get('/api/v1/analytics/'+view,params=mismatch).json()['items']
+    old=admin.get('/api/v1/product-types?state=all').json()['items']
+    item=next(item for item in old if item['id']==seed['product_type_id'])
+    retired=admin.request('DELETE','/api/v1/product-types/'+item['id'],json={'row_version':item['row_version'],'reason':'Ngừng sử dụng, vẫn phân tích lịch sử'},headers={'Idempotency-Key':str(uuid.uuid4())})
+    assert retired.status_code==200,retired.text
+    assert summary(admin,product_type_id=item['id'])['denominator']==40
