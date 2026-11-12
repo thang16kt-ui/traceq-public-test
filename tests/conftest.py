@@ -35,6 +35,12 @@ def database_schema():
         conn.execute(text('DROP SCHEMA public CASCADE'))
         conn.execute(text('CREATE SCHEMA public'))
     Base.metadata.create_all(engine)
+    # Trigger bất biến của minh chứng giống migration 007.
+    sql = (Path(__file__).resolve().parents[1] / 'migrations' / '007_evidence.sql').read_text()
+    start = sql.index('CREATE OR REPLACE FUNCTION attachments_immutable')
+    end = sql.index('FOR EACH ROW EXECUTE FUNCTION attachments_immutable();') + len('FOR EACH ROW EXECUTE FUNCTION attachments_immutable();')
+    with engine.begin() as conn:
+        conn.exec_driver_sql(sql[start:end])
     yield
 
 @pytest.fixture(autouse=True)

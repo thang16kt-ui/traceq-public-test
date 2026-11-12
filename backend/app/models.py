@@ -299,6 +299,12 @@ class Attachment(Base, Versioned):
     uploaded_by = mapped_column(ForeignKey('users.id'), nullable=False)
     case_defect_id = mapped_column(ForeignKey('case_defects.id'), nullable=True)
     kind = mapped_column(String(10), default='truoc', server_default='truoc', nullable=False)
+    sha256 = mapped_column(String(64), nullable=False)
+    original_sha256 = mapped_column(String(64), nullable=True)
+    taken_at = mapped_column(DateTime(timezone=True), nullable=True)
+    quality = mapped_column(JSON, default=dict, server_default='{}', nullable=False)
+    width = mapped_column(Integer, nullable=True)
+    height = mapped_column(Integer, nullable=True)
     __table_args__ = (CheckConstraint("kind IN ('truoc','sau')", name='attachments_kind_check'),)
 
 class ScanEvent(Base):

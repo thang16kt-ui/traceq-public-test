@@ -68,7 +68,7 @@ class SessionIn(Input):
     stage: str = Field(min_length=1,max_length=80)
     inspected_count: int | None = Field(default=None,ge=0)
     sample_method: str = Field(default='manual',max_length=160)
-    population_key: str = Field(min_length=1,max_length=160)
+    population_key: str | None = Field(default=None,max_length=160)
     started_at: datetime | None = None
     @field_validator('started_at')
     @classmethod

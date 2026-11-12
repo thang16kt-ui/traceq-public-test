@@ -35,6 +35,8 @@ def migrate():
             connection.execute(text('GRANT USAGE ON SCHEMA public TO traceq_app'))
             connection.execute(text('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO traceq_app'))
             connection.execute(text('REVOKE UPDATE,DELETE,TRUNCATE ON audit_logs FROM traceq_app'))
+            connection.execute(text('REVOKE UPDATE,DELETE,TRUNCATE ON attachments, state_history FROM traceq_app'))
+            connection.execute(text('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO traceq_app'))
             connection.execute(text('REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON schema_migrations FROM traceq_app'))
     print(f'Schema {SCHEMA_VERSION} ready; runtime grants reconciled')
 

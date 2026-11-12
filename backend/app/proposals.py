@@ -150,7 +150,6 @@ def detail(db, user, case):
     product = product_of(db, case)
     result['can_review'] = user.id in supervisor_ids(db, case, product) or user.has('quan_ly')
     result['previous_proposals'] = db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.unit_id == case.unit_id, DefectCase.id != case.id)) or 0
-    result['attachments'] = [row(a) for a in db.scalars(select(Attachment).where(Attachment.case_id == case.id).order_by(Attachment.created_at))]
     for extend in DETAIL_EXTENSIONS:
         extend(db, user, case, result)
     return result

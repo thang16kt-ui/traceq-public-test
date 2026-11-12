@@ -11,6 +11,7 @@ import { defaultRole, safeStorage, SessionContext } from './lib/session';
 import type { Session } from './lib/session';
 import { Card, Loading, ToastProvider } from './ui/components';
 import { routeElement } from './routes';
+import { clearOffline, startBackgroundSync } from './lib/offline';
 import Login from './screens/Login';
 import { ChangePassword } from './screens/Me';
 
@@ -75,6 +76,8 @@ export default function App() {
     onUnauthorized(() => setState((s) => ({ ...s, user: null })));
   }, [accept]);
 
+  useEffect(() => { if (state.user) return startBackgroundSync(); }, [state.user]);
+
   useEffect(() => {
     if (!state.user || state.user.must_change_password) return;
     let alive = true;
@@ -90,6 +93,8 @@ export default function App() {
     setActiveRole: (role: string) => { safeStorage.set('traceq.activeRole.' + state.user!.id, role); setRole(role); navigate(HOME[role]); },
     logout: async () => {
       try { await post('/auth/logout'); } catch { /* vẫn xóa dữ liệu trên máy */ }
+      await clearOffline();
+      safeStorage.clearPrefix('traceq.draft.');
       window.dispatchEvent(new Event('traceq:logout'));
       setState((s) => ({ ...s, user: null })); navigate('/', true);
     },

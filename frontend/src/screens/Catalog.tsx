@@ -5,6 +5,7 @@ import { del, get, patch, post, put, query } from '../lib/api';
 import type { Row } from '../lib/api';
 import { formatMoney, formatTime } from '../lib/format';
 import { navigate } from '../lib/router';
+import { QuickSession } from './Create';
 import { Badge, Button, Card, Chips, ConfirmDialog, Empty, ErrorBox, Loading, Modal, PageHeader, Pager, Select, TextInput, useLoad, useToast } from '../ui/components';
 
 type State = 'active' | 'inactive' | 'all';
@@ -182,7 +183,28 @@ export function ProductsScreen({ tab: initial }: { tab?: string }) {
 }
 
 function SessionsTab() {
-  return <Empty title="Đợt kiểm tra">Danh sách đợt kiểm tra sẽ có ở bước ghi nhận lỗi.</Empty>;
+  const toast = useToast();
+  const [status, setStatus] = useState<'open' | 'closed'>('open');
+  const [modal, setModal] = useState<Row | 'new' | null>(null);
+  const [count, setCount] = useState('');
+  const { data, loading, error, reload } = useLoad((s) => get('/inspection-sessions' + query({ status, page_size: 100 }), s), [status]);
+  return <>
+    <div className="toolbar"><Chips label="Trạng thái đợt" value={status} onChange={setStatus} options={[{ value: 'open', label: 'Đang kiểm' }, { value: 'closed', label: 'Đã đóng' }]} />
+      <Button variant="primary" onClick={() => setModal('new')}>Tạo đợt kiểm tra</Button></div>
+    {loading && !data ? <Loading /> : error ? <ErrorBox error={error} onRetry={reload} /> : <div className="table-wrap"><table className="table">
+      <thead><tr><th>Bắt đầu</th><th>Sản phẩm / lô</th><th>Ca · công đoạn</th><th className="num">Đã kiểm</th><th className="num">SP lỗi</th><th>Tình trạng</th><th><span className="sr-only">Thao tác</span></th></tr></thead>
+      <tbody>{data.items.map((s: Row) => <tr key={s.id}><td>{formatTime(s.started_at)}</td><td>{s.batch.product_type.name}<div className="muted">Lô {s.batch.lot_code}</div></td>
+        <td>{s.shift} · {s.stage}<div className="muted">{s.line}</div></td><td className="num">{s.inspected_count ?? '—'}</td><td className="num">{s.defective_count}</td>
+        <td><Badge tone={s.status === 'open' ? 'ok' : 'neutral'}>{s.status === 'open' ? 'đang kiểm' : 'đã đóng'}</Badge></td>
+        <td>{s.status === 'open' && <Button onClick={() => { setCount(s.inspected_count ?? ''); setModal(s); }}>Nhập số đã kiểm / đóng đợt</Button>}</td></tr>)}</tbody></table>
+      {!data.items.length && <Empty title="Không có đợt kiểm tra" />}</div>}
+    {modal === 'new' && <Modal title="Tạo đợt kiểm tra" onClose={() => setModal(null)}><QuickSession onCreated={() => { setModal(null); toast('Đã tạo đợt'); reload(); }} /></Modal>}
+    {modal && modal !== 'new' && <Modal title="Đợt kiểm tra" onClose={() => setModal(null)} footer={<>
+      <Button onClick={async () => { try { await patch(`/inspection-sessions/${(modal as Row).id}`, { row_version: (modal as Row).row_version, inspected_count: count === '' ? null : Number(count), reason: 'Cập nhật số đã kiểm' }); toast('Đã lưu'); setModal(null); reload(); } catch (e: any) { toast(e.message, 'error'); } }}>Lưu số đã kiểm</Button>
+      <Button variant="primary" onClick={async () => { try { await patch(`/inspection-sessions/${(modal as Row).id}`, { row_version: (modal as Row).row_version, inspected_count: count === '' ? null : Number(count), status: 'closed', reason: 'Đóng đợt kiểm tra cuối ca' }); toast('Đã đóng đợt'); setModal(null); reload(); } catch (e: any) { toast(e.message, 'error'); } }}>Đóng đợt</Button></>}>
+      <TextInput label="Số sản phẩm đã kiểm trong đợt" inputMode="numeric" value={count} onChange={(e) => setCount(e.target.value.replace(/[^\d]/g, ''))} hint="Dùng làm mẫu số tính tỷ lệ sản phẩm lỗi. Phải ≥ số sản phẩm lỗi đã xác nhận." />
+    </Modal>}
+  </>;
 }
 
 // ---------- Thiết lập (Quản lý) ----------

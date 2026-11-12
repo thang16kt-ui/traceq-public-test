@@ -8,6 +8,12 @@ import { Empty, PageHeader } from './ui/components';
 import Me from './screens/Me';
 import Users from './screens/Users';
 import AuditLog from './screens/AuditLog';
+import ProposalList from './screens/Proposals';
+import Create from './screens/Create';
+import Sheet, { AfterSubmit } from './screens/Sheet';
+import Evidence from './screens/Evidence';
+import Detail from './screens/Detail';
+import Scan from './screens/Scan';
 import DefectTypes from './screens/DefectTypes';
 import { ProductsScreen, SetupHub } from './screens/Catalog';
 
@@ -30,6 +36,19 @@ export const ROUTES: Record<string, Entry> = {
   'san-pham': { roles: MANAGERS, render: (r) => <ProductsScreen tab={r.parts[1]} /> },
   'thiet-lap': { roles: MANAGERS, render: () => <SetupHub /> },
   'nhat-ky': { roles: MANAGERS, render: () => <AuditLog /> },
+  'viec-cua-toi': { roles: ['nguoi_tao', 'quan_ly'], render: () => <ProposalList title="Việc của tôi" subtitle="Đề xuất do bạn tạo" view="mine" canCreate extraFilters={[{ value: 'nhap', label: 'Nháp' }]} /> },
+  'can-duyet': { roles: ['giam_sat', 'quan_ly'], render: () => <ProposalList title="Cần duyệt" subtitle="Đề xuất của sản phẩm bạn giám sát" view="review" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /> },
+  'tao': { roles: ['nguoi_tao', 'quan_ly'], render: (r) => <Create key={r.parts[1] || 'new'} editId={r.parts[1]} token={r.params.get('qr') || r.params.get('serial') || undefined} /> },
+  'quet': { render: (r) => <Scan key={r.parts[1] || ''} token={r.parts[1]} /> },
+  'de-xuat': { render: (r, session) => {
+    const [, id, sub] = r.parts;
+    if (!id) return hasRole(session.user, ...MANAGERS) ? <ProposalList title="Đề xuất" view="all" canCreate={hasRole(session.user, 'quan_ly')}
+      extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'cho_cap_tren', label: 'Chờ cấp trên' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }, { value: 'da_dong', label: 'Đã đóng' }]} /> : <Forbidden />;
+    if (sub === 'tong-quan') return <Sheet id={id} />;
+    if (sub === 'da-gui') return <AfterSubmit id={id} />;
+    if (sub === 'minh-chung') return <Evidence id={id} />;
+    return <Detail key={id} id={id} />;
+  } },
 };
 
 const TITLES: Record<string, string> = {

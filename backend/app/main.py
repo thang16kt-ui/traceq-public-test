@@ -20,7 +20,7 @@ from .migrations import SCHEMA_VERSION
 from .catalogs import router as catalog_router, catalog_lock, active_batch
 from .models import *
 from .schemas import *
-from .services import advisory_lock, audit, bump, case_detail, get_case, mark_catalog_used, payload_hash, plain, replace_defects, row, write
+from .services import advisory_lock, audit, bump, mark_catalog_used, payload_hash, plain, row, write
 
 logger=logging.getLogger('quality')
 logger.setLevel(logging.INFO)
@@ -79,23 +79,33 @@ def ready(db:Session=Depends(get_db)):
 
 def listing(db,model,page=1,page_size=50,conditions=(),order=None):
     total=db.scalar(select(func.count()).select_from(model).where(*conditions))
-    stmt=select(model).where(*conditions).order_by(order or model.created_at.desc()).offset((page-1)*page_size).limit(page_size)
+    stmt=select(model).where(*conditions).order_by(order if order is not None else model.created_at.desc()).offset((page-1)*page_size).limit(page_size)
     return {'items':[row(x) for x in db.scalars(stmt)],'total':total,'page':page,'page_size':page_size}
 
 @app.get(PREFIX+'/inspection-sessions',tags=['Đợt kiểm tra'])
-def sessions(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    result=listing(db,InspectionSession,page,page_size)
+def sessions(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),status:Literal['open','closed']|None=None,batch_id:uuid.UUID|None=None,
+             user:User=Depends(current_user),db:Session=Depends(get_db)):
+    conditions=[]
+    if status: conditions.append(InspectionSession.status==status)
+    if batch_id: conditions.append(InspectionSession.batch_id==str(batch_id))
+    result=listing(db,InspectionSession,page,page_size,conditions,InspectionSession.started_at.desc())
     for item in result['items']:
         b=db.get(Batch,item['batch_id']); item['batch']={**row(b),'product_type':row(db.get(ProductType,b.product_type_id))}
+        item['proposal_count']=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id==item['id']))
+        item['defective_count']=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id==item['id'],DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='da_huy'))
     return result
 
 @app.post(PREFIX+'/inspection-sessions',status_code=201,tags=['Đợt kiểm tra'])
 def create_session(data:SessionIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
+    require_role(user,'nguoi_tao','giam_sat',*MANAGERS)
     def action():
         catalog_lock(db)
         active_batch(db, data.batch_id)
         mark_catalog_used(db, Batch, str(data.batch_id))
-        obj=InspectionSession(**data.model_dump(exclude_none=True),created_by=user.id)
+        values=data.model_dump(exclude_none=True)
+        # Tạo nhanh: mẫu số mặc định theo lô/ca/công đoạn/ngày (mỗi đợt là một tập kiểm riêng).
+        values['population_key']=values.get('population_key') or f"{data.batch_id}:{data.line}:{data.shift}:{data.stage}:{uid()[:8]}"
+        obj=InspectionSession(**values,created_by=user.id)
         obj.batch_id=str(obj.batch_id); db.add(obj); db.flush()
         audit(db,user,'create','inspection_sessions',obj.id,row(obj),request.state.request_id)
         return row(obj)
@@ -119,37 +129,6 @@ def patch_session(session_id:uuid.UUID,data:SessionPatch,request:Request,user:Us
         bump(obj); audit(db,user,'update','inspection_sessions',obj.id,{'before':before,'after':row(obj)},request.state.request_id,data.reason)
         return row(obj)
     return write(db,user,request,data.model_dump(mode='json'),action)
-
-@app.post(PREFIX+'/defect-cases/{case_id}/attachments',status_code=201,tags=['Minh chứng'])
-async def upload_attachment(case_id:uuid.UUID,request:Request,file:UploadFile=File(...),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    get_case(db,user,case_id)
-    from PIL import Image, UnidentifiedImageError
-    body=await file.read(5*1024*1024+1)
-    if len(body)>5*1024*1024: raise ApiError(422,'FILE_TOO_LARGE','Ảnh tối đa 5 MB')
-    try:
-        img=Image.open(io.BytesIO(body)); img.verify()
-        img=Image.open(io.BytesIO(body))
-        if img.width*img.height>20000000: raise ValueError('pixels')
-        if img.format not in ('JPEG','PNG'): raise ValueError('format')
-        clean=io.BytesIO(); img.convert('RGB').save(clean,format='JPEG',quality=90); content=clean.getvalue()
-    except (UnidentifiedImageError,Image.DecompressionBombError,ValueError,OSError): raise ApiError(422,'INVALID_IMAGE','Chỉ nhận nội dung ảnh JPEG/PNG hợp lệ, tối đa 20 triệu pixel')
-    payload={'sha256':__import__('hashlib').sha256(body).hexdigest()}
-    def action():
-        obj=get_case(db,user,case_id,True)
-        storage=DATA_DIR/'attachments'; storage.mkdir(parents=True,exist_ok=True)
-        att=Attachment(id=uid(),case_id=obj.id,storage_key='',content_type='image/jpeg',size_bytes=len(content),uploaded_by=user.id)
-        att.storage_key=att.id+'.jpg'; (storage/att.storage_key).write_bytes(content); db.add(att); bump(obj)
-        audit(db,user,'upload','attachments',att.id,{'case_id':obj.id,'size_bytes':len(content)},request.state.request_id)
-        db.flush(); return row(att)
-    return write(db,user,request,payload,action,201)
-
-@app.get(PREFIX+'/attachments/{attachment_id}',tags=['Minh chứng'])
-def attachment(attachment_id:uuid.UUID,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    att=db.get(Attachment,str(attachment_id))
-    if not att: raise ApiError(404,'NOT_FOUND','Không tìm thấy minh chứng')
-    get_case(db,user,att.case_id); path=(DATA_DIR/'attachments'/att.storage_key).resolve()
-    if not path.is_relative_to((DATA_DIR/'attachments').resolve()) or not path.is_file(): raise ApiError(404,'NOT_FOUND','Tệp không khả dụng')
-    return FileResponse(path,media_type=att.content_type)
 
 @app.get(PREFIX+'/export-schedules',tags=['Xuất dữ liệu'])
 def schedules(user:User=Depends(current_user),db:Session=Depends(get_db)):
