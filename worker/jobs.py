@@ -20,5 +20,9 @@ def periodic_jobs(engine, force=False):
                 result['reports'] = scheduled_reports(db)
                 _last_alerts = time.monotonic()
             result['pushes'] = send_pending_pushes(db)
+            from backend.app.system import heartbeat
+            heartbeat(db, 'scheduler_heartbeat')
             db.commit()
+    from backend.app.backup import nightly_backup
+    result['backup'] = nightly_backup(engine)
     return result

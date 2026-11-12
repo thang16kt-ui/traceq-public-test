@@ -507,6 +507,18 @@ class ReportExport(Base):
                       CheckConstraint("kind IN ('thu_cong','dinh_ky')", name='report_exports_kind_check'),
                       CheckConstraint("format IN ('pdf','xlsx')", name='report_exports_format_check'))
 
+class ErrorEvent(Base):
+    __tablename__ = 'error_events'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    source = mapped_column(String(10), nullable=False)
+    message = mapped_column(Text, nullable=False)
+    detail = mapped_column(Text, nullable=True)
+    path = mapped_column(String(300), nullable=True)
+    request_id = mapped_column(String(100), nullable=True)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False, index=True)
+    __table_args__ = (CheckConstraint("source IN ('server','client','worker')", name='error_events_source_check'),)
+
 class AppSetting(Base):
     __tablename__ = 'app_settings'
     key = mapped_column(String(80), primary_key=True)

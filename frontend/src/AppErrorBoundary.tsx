@@ -1,5 +1,6 @@
 import {Component} from 'react';
-import type {ReactNode} from 'react';
+import type {ErrorInfo, ReactNode} from 'react';
+import {reportError} from './lib/errors';
 
 export function reloadApp(){
   const url=new URL(location.href);
@@ -11,6 +12,9 @@ export default class AppErrorBoundary extends Component<{children:ReactNode},{er
   state:{error:string|null}={error:null};
   static getDerivedStateFromError(error:unknown){
     return {error:error instanceof Error?error.message:String(error)};
+  }
+  componentDidCatch(error:unknown,info:ErrorInfo){
+    reportError('Trang trắng: '+(error instanceof Error?error.message:String(error)),(error instanceof Error?error.stack||'':'')+'\n'+(info.componentStack||''));
   }
   render(){
     if(this.state.error!==null)return <main className="app-recovery" role="alert">

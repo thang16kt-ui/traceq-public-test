@@ -172,7 +172,13 @@ def demo_accounts_only(password_env):
     password=os.getenv(password_env,'')
     if len(password)<10: raise SystemExit(f'Cần biến {password_env} từ 10 ký tự')
     with SessionLocal() as db:
-        advisory_lock(db,'seed-demo'); ensure_demo_accounts(db,password); db.commit()
+        advisory_lock(db,'seed-demo'); accounts=ensure_demo_accounts(db,password)
+        # Dữ liệu demo cũ chưa gán giám sát: gán giám sát mẫu để thử được luồng duyệt.
+        for product in db.scalars(select(ProductType).where(ProductType.supervisor_id.is_(None))):
+            product.supervisor_id=accounts['demo.giamsat'].id; product.backup_supervisor_id=accounts['demo.giamsat2'].id
+        for case in db.scalars(select(DefectCase).where(DefectCase.supervisor_id.is_(None))):
+            case.supervisor_id=accounts['demo.giamsat'].id; case.supervisor_name_snapshot=accounts['demo.giamsat'].display_name
+        db.commit()
 
 def generate_vapid():
     import base64
@@ -189,10 +195,19 @@ def main():
     sub.add_parser('migrate')
     p=sub.add_parser('create-user'); p.add_argument('--username',required=True); p.add_argument('--display-name',required=True); p.add_argument('--roles',required=True,help='Nhiều vai trò cách nhau dấu phẩy: '+','.join(ROLES)); p.add_argument('--code'); p.add_argument('--password-env')
     p=sub.add_parser('seed-demo'); p.add_argument('--password-env',default='DEMO_PASSWORD')
+    p=sub.add_parser('backup',help='Sao lưu logic DB + ảnh/báo cáo (kèm mã băm)'); p.add_argument('--out')
+    p=sub.add_parser('restore-drill',help='Khôi phục bản sao vào schema tạm và đối chiếu'); p.add_argument('path')
     sub.add_parser('generate-vapid',help='Sinh cặp khóa Web Push (đặt vào VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY, giữ bí mật khóa riêng)')
     args=parser.parse_args()
     if args.command=='migrate': migrate()
     elif args.command=='generate-vapid': generate_vapid()
+    elif args.command=='backup':
+        from .backup import create_backup
+        path,manifest=create_backup(engine,args.out); print(f'Đã sao lưu {sum(t["rows"] for t in manifest["tables"].values())} dòng vào {path}')
+    elif args.command=='restore-drill':
+        from .backup import restore_drill
+        result=restore_drill(engine,args.path); print(json.dumps(result,ensure_ascii=False,indent=2))
+        if not result['ok']: raise SystemExit('Diễn tập khôi phục KHÔNG đạt')
     elif args.command=='create-user': create_user(args.username,args.display_name,args.roles,args.password_env,args.code)
     else: seed_demo(args.password_env)
 

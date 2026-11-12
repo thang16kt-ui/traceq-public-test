@@ -56,6 +56,9 @@ from .reports import router as reports_router
 app.include_router(reports_router)
 from .auto import router as auto_router
 app.include_router(auto_router)
+from .system import router as system_router, install as install_monitoring
+app.include_router(system_router)
+install_monitoring(app)
 
 @app.middleware('http')
 async def requests(request,call_next):

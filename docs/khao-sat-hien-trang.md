@@ -103,3 +103,58 @@ Tổng quan · Hồ sơ lỗi (bảng + chi tiết) · Tạo hồ sơ · Quét Q
 ## 8. Kế hoạch tiếp theo
 
 Thực hiện theo mục 12 của đặc tả, mỗi hạng mục 1 commit có test, sau khi anh/chị chốt các điểm Q1–Q13 (ít nhất Q2, Q3, Q4, Q5, Q8 vì ảnh hưởng ngay hạng mục 2–6). Migration mới đánh số tiếp `003_…`, không sửa migration cũ, giữ dữ liệu demo hiện có.
+
+---
+
+# Kết quả thực hiện (hạng mục 2–17)
+
+Các điểm Q1–Q13 đã được chốt "đồng ý tất cả". Mỗi hạng mục là một commit trên nhánh `cai-tien-traceq`.
+Kiểm chứng cuối: **159 test backend** (PostgreSQL thật) + **3 test Vitest** + **E2E giao diện Playwright** 4 vai trò
+(tạo → gửi → chụp → xác nhận → phương án → cấp trên → hoàn tất → đóng → xuất PDF) đều đạt; nâng cấp DB bản cũ
+(schema 002 + dữ liệu mẫu cũ) lên 013 đạt.
+
+## Đã làm
+
+| # | Hạng mục | Nội dung chính |
+|---|---|---|
+| 2 | Xác thực, vai trò | Nhiều vai trò/tài khoản, mã NV, ghi nhớ 30 ngày, khóa sau 5 lần sai, phiên theo thiết bị + thu hồi, khóa/đặt lại từ xa, buộc đổi mật khẩu; bỏ truy cập khách |
+| 3 | Danh mục | Ngừng dùng/khôi phục/xóa hẳn có xác nhận, snapshot tên trên mục lỗi, giám sát + giá vốn theo sản phẩm, cài đặt chung |
+| 4 | Cài đặt loại lỗi | ≤ 3 mức do Quản lý cài (không mức mặc định), tiêu chí, giá + ngày hiệu lực + lịch sử, hạn, phương án gợi ý, cờ ưu tiên cascade |
+| 5 | Máy trạng thái | Một hàm `transition()`; state_history + audit_log; DX-xxxx; 4 mắt; nháp riêng tư |
+| 6 | Ghi nhận | Tạo từ QR/serial, đợt kiểm tạo nhanh, tờ tổng quan A4, QR sau gửi, minh chứng từng mục (SHA-256, bất biến ở DB) |
+| 7 | Duyệt giám sát | Thẻ kiểm tra trước (luật), Xác nhận/Từ chối, chi tiết + lịch sử đầy đủ, PDF đề xuất |
+| 8 | Phương án + cấp trên | Ước tính ở server, định tuyến theo rủi ro, Phê duyệt/Từ chối |
+| 9 | Hoàn tất + đóng | Chi phí thực tế, nguyên nhân gốc, ảnh sau, làm lại cộng dồn, đóng ghi sổ chi phí |
+| 10 | Cảnh báo + thông báo | Cron ở server: quá hạn, leo thang, cuối ngày, nhắc chi phí, lỗi lặp lại; giám sát thay thế; Web Push |
+| 11 | Chi phí 2 nguồn | Median + loại ngoại lai, N mẫu, cửa sổ 90 ngày, đo sai số ước tính |
+| 12 | Tra cứu | Serial/DX/lô/loại lỗi/thời gian + lịch sử sản phẩm |
+| 13 | PWA + offline | Manifest, service worker, hàng đợi IndexedDB (đề xuất + ảnh), không trùng, cold start |
+| 14 | Dashboard | KPI, Pareto, chi phí tuần + dự báo có điều kiện (≥ 8 tuần, khoảng 95%), xu hướng, phương án, Excel |
+| 15 | Báo cáo | PDF/Excel BC-xxxx, mã băm, chỗ ký, phụ lục ảnh, gửi định kỳ (SMTP), nhật ký |
+| 16 | Tự động duyệt | Luật → gợi ý (đo đồng thuận) → tự động; ca loại trừ bắt buộc; kiểm tra mẫu; đảo ngược 24 giờ; tự tạm dừng; kill switch; màn Hiệu quả |
+| 17 | Vận hành | Sao lưu đêm + diễn tập khôi phục tự động, ghi lỗi server/client/worker, màn Hệ thống, tài liệu vận hành |
+
+## Chưa làm / có giới hạn
+
+- **PIN / vân tay (WebAuthn):** chưa làm (Q10). Màn "Tôi" ghi rõ chưa hỗ trợ.
+- **Kho ảnh S3 (Q1):** mới có lớp `FileStore` lưu đĩa (ghi một lần). Chưa viết bản S3; dùng thật cần **đĩa bền** (Render disk)
+  hoặc bổ sung lớp S3 cùng giao diện.
+- **Ảnh khớp loại lỗi:** không tự đánh giá; thẻ kiểm tra trước ghi "chưa hỗ trợ".
+- **Email & Web Push:** đã viết và test với giả lập; **chưa thử với máy chủ SMTP/dịch vụ push thật** (cần cấu hình biến môi trường).
+- **Nhập dữ liệu hàng loạt:** hoãn theo đặc tả.
+- **Chế độ tối (dark mode):** không có (không nằm trong đặc tả).
+- **Chưa thử trên điện thoại thật** (camera, in tem, cài PWA trên iOS); đã thử bằng Chromium giả lập Pixel 7.
+- **Chưa triển khai lên Render:** chưa có quyền push GitHub từ phiên này nên bản test public vẫn chạy mã cũ.
+
+## Rủi ro còn lại
+
+1. **Bản test Render free dùng đĩa tạm** (`DATA_DIR=/tmp/...`): ảnh và báo cáo mất khi khởi động lại. Màn Hệ thống cảnh báo đỏ.
+   Dùng thật: `render.yaml` (có disk) hoặc S3.
+2. **Sao lưu nằm cùng đĩa với dữ liệu** nếu không đặt `BACKUP_DIR` ra nơi khác; cần chép ra ngoài.
+3. **Dữ liệu demo cũ** sau nâng cấp: các mức lỗi cũ chưa có tiêu chí (Quản lý cần điền); đề xuất cũ trạng thái "confirmed"
+   chuyển thành "Chờ chọn phương án".
+4. **Gói xuất dữ liệu cũ (interchange):** giữ nguyên cấu trúc, nhưng giá trị trạng thái/mức đã đổi (xem `docs/file-contract.md`).
+   Hệ thống nào đang nhận gói này phải cập nhật.
+5. **Hiệu năng:** chưa đo lại tải sau khi thêm các bước mới (bản đo cũ ở `docs/legacy/`). Tính toán dashboard/ước tính chạy
+   trực tiếp trên DB; với dữ liệu rất lớn nên thêm chỉ mục/tổng hợp trước.
+6. **Tự động duyệt** mặc định **Tắt**; cần ≥ 200 lượt duyệt ở chế độ "Chỉ gợi ý" với đồng thuận ≥ 95% mới bật được "Tự động".

@@ -37,8 +37,14 @@ def main():
                 for result in import_incoming(engine):
                     logging.info("import %s", json.dumps(result, ensure_ascii=False))
                 wait = 5
-        except Exception:
+        except Exception as exc:
             logging.exception("background iteration failed; durable work retained")
+            try:
+                import traceback
+                from backend.app.system import record_error
+                record_error('worker', f'{args.mode}: {type(exc).__name__}: {exc}', traceback.format_exc())
+            except Exception:
+                pass
             wait = 5
         if args.once:
             break

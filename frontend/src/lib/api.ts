@@ -12,7 +12,7 @@ export function uuid(): string {
 }
 
 let csrfToken = '';
-export function setCSRF(value: string) { csrfToken = value || ''; }
+export function setCSRF(value: string) { csrfToken = value || ''; (window as any).__traceqCsrf = csrfToken; }
 
 export class ApiError extends Error {
   status: number; code: string; fields: Row; requestId: string;
