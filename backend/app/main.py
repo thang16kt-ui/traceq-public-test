@@ -46,6 +46,8 @@ from .treatment import router as treatment_router
 app.include_router(treatment_router)
 from .completion import router as completion_router
 app.include_router(completion_router)
+from .notify import router as notify_router
+app.include_router(notify_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

@@ -7,6 +7,7 @@ import threading
 
 from backend.app.db import engine
 from .services import import_incoming, process_one, recover_stalled, scheduler_tick
+from .jobs import periodic_jobs
 
 
 def main():
@@ -28,6 +29,9 @@ def main():
                 wait = 0.1 if worked else 2
             elif args.mode == "scheduler":
                 logging.info("scheduler queued=%d", scheduler_tick(engine))
+                result = periodic_jobs(engine)
+                if any(result.values()):
+                    logging.info("jobs %s", json.dumps(result))
                 wait = 15
             else:
                 for result in import_incoming(engine):

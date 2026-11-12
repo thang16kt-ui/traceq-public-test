@@ -442,6 +442,34 @@ class AnalysisRecord(Base):
     data = mapped_column(JSON, nullable=False)
     scope_key = mapped_column(String(300), nullable=False)
 
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    type = mapped_column(String(20), nullable=False)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=True)
+    title = mapped_column(String(200), nullable=False)
+    body = mapped_column(Text, nullable=False)
+    link = mapped_column(String(300), nullable=True)
+    dedupe_key = mapped_column(String(200), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    read_at = mapped_column(DateTime(timezone=True), nullable=True)
+    push_status = mapped_column(String(10), default='cho', nullable=False)  # cho | da_gui | bo_qua | loi
+    push_attempts = mapped_column(Integer, default=0, server_default='0', nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'dedupe_key', name='notifications_dedupe_key'),
+                      Index('ix_notifications_user', 'user_id', 'created_at'), Index('ix_notifications_push', 'push_status'))
+
+class PushSubscription(Base):
+    __tablename__ = 'push_subscriptions'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    endpoint = mapped_column(Text, unique=True, nullable=False)
+    p256dh = mapped_column(String(200), nullable=False)
+    auth = mapped_column(String(100), nullable=False)
+    user_agent = mapped_column(String(300), default='', server_default='', nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    last_error = mapped_column(Text, nullable=True)
+
 class AppSetting(Base):
     __tablename__ = 'app_settings'
     key = mapped_column(String(80), primary_key=True)

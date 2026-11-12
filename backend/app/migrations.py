@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 from .catalog_keys import KEY_FIELDS, catalog_key
 
-SCHEMA_VERSION = '009'
+SCHEMA_VERSION = '010'
 
 
 def approved_retirements(connection):

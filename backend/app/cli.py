@@ -130,14 +130,25 @@ def demo_accounts_only(password_env):
     with SessionLocal() as db:
         advisory_lock(db,'seed-demo'); ensure_demo_accounts(db,password); db.commit()
 
+def generate_vapid():
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    key=ec.generate_private_key(ec.SECP256R1())
+    private=base64.urlsafe_b64encode(key.private_numbers().private_value.to_bytes(32,'big')).rstrip(b'=').decode()
+    public=base64.urlsafe_b64encode(key.public_key().public_bytes(serialization.Encoding.X962,serialization.PublicFormat.UncompressedPoint)).rstrip(b'=').decode()
+    print('VAPID_PUBLIC_KEY='+public); print('VAPID_PRIVATE_KEY='+private)
+
 def main():
     parser=argparse.ArgumentParser(description='TraceQ: migrations và bootstrap rõ ràng')
     sub=parser.add_subparsers(dest='command',required=True)
     sub.add_parser('migrate')
     p=sub.add_parser('create-user'); p.add_argument('--username',required=True); p.add_argument('--display-name',required=True); p.add_argument('--roles',required=True,help='Nhiều vai trò cách nhau dấu phẩy: '+','.join(ROLES)); p.add_argument('--code'); p.add_argument('--password-env')
     p=sub.add_parser('seed-demo'); p.add_argument('--password-env',default='DEMO_PASSWORD')
+    sub.add_parser('generate-vapid',help='Sinh cặp khóa Web Push (đặt vào VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY, giữ bí mật khóa riêng)')
     args=parser.parse_args()
     if args.command=='migrate': migrate()
+    elif args.command=='generate-vapid': generate_vapid()
     elif args.command=='create-user': create_user(args.username,args.display_name,args.roles,args.password_env,args.code)
     else: seed_demo(args.password_env)
 

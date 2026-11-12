@@ -7,3 +7,6 @@ COOKIE_SECURE = os.getenv('COOKIE_SECURE', 'true').lower() == 'true'
 DATA_DIR = Path(os.getenv('DATA_DIR', '/data')).resolve()
 SESSION_HOURS = int(os.getenv('SESSION_HOURS', '12'))
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'mailto:admin@example.invalid')
