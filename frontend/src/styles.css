@@ -258,3 +258,7 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
   @page { size: A4; margin: 10mm; }
   .a4 { box-shadow: none; border: 0; padding: 0; min-height: auto; max-width: none; }
 }
+.check-list { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 6px; }
+.check-list li { line-height: 1.5; }
+.precheck { border-left: 5px solid var(--info); }
+.suggestion { background: var(--info-soft); border-radius: 8px; padding: 8px 12px; }

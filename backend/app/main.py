@@ -40,6 +40,8 @@ from .proposals import router as proposals_router
 app.include_router(proposals_router)
 from .evidence import router as evidence_router
 app.include_router(evidence_router)
+from .review import router as review_router
+app.include_router(review_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

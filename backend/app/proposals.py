@@ -31,6 +31,7 @@ from .workflow import (ACTIONS, OPEN_STATUSES, STATUS_LABELS, allowed_actions, c
 
 router = APIRouter(prefix='/api/v1', tags=['Đề xuất'])
 LEVEL_RANK = {'nhe': 1, 'trung_binh': 2, 'nang': 3}
+SPECIAL_LABELS = {'tao_nhap': 'Tạo nháp', 'dao_nguoc': 'Đảo ngược quyết định tự động', 'kiem_tra_mau_sai': 'Kiểm tra mẫu: Sai → trả lại người duyệt'}
 
 
 class ProposalIn(BaseModel):
@@ -131,7 +132,7 @@ def history(db, case):
     entries = []
     for h in db.scalars(select(StateHistory).where(StateHistory.case_id == case.id)):
         entries.append({'at': h.at.isoformat(), 'kind': 'trang_thai', 'action': h.action,
-                        'label': ACTIONS[h.action].label if h.action in ACTIONS else ('Đảo ngược quyết định tự động' if h.action == 'dao_nguoc' else 'Khởi tạo trạng thái'),
+                        'label': ACTIONS[h.action].label if h.action in ACTIONS else SPECIAL_LABELS.get(h.action, 'Chuyển từ dữ liệu cũ'),
                         'from': h.from_status, 'to': h.to_status, 'from_label': STATUS_LABELS.get(h.from_status), 'to_label': STATUS_LABELS.get(h.to_status),
                         'actor': actor_name(db, h.actor_id, h.actor_kind), 'actor_kind': h.actor_kind, 'reason': h.reason, 'meta': h.meta})
     for e in db.scalars(select(CaseEvent).where(CaseEvent.case_id == case.id)):
@@ -220,7 +221,7 @@ def create_proposal(data: ProposalIn, request: Request, user: User = Depends(cur
         replace_defects(db, case, data.defects, user)
         refresh_flags(db, case)
         mark_catalog_used(db, Batch, batch.id)
-        db.add(StateHistory(case_id=case.id, from_status=None, to_status='nhap', action='tao_nhap', actor_id=user.id, actor_kind='nguoi', reason='Lưu nháp', meta={}))
+        db.add(StateHistory(case_id=case.id, from_status=None, to_status='nhap', action='tao_nhap', actor_id=user.id, actor_kind='nguoi', reason=None, meta={}))
         audit(db, user, 'create', 'defect_cases', case.id, summary(db, case), request.state.request_id)
         db.flush()
         return detail(db, user, case)
