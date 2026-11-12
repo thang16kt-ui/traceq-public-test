@@ -50,6 +50,8 @@ from .notify import router as notify_router
 app.include_router(notify_router)
 from .search import router as search_router
 app.include_router(search_router)
+from .dashboard import router as dashboard_router
+app.include_router(dashboard_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

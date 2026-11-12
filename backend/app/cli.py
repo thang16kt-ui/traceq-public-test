@@ -74,6 +74,64 @@ def ensure_demo_accounts(db,password):
         result[username]=user
     return result
 
+def seed_history(db,accounts,product,batch,types,started):
+    """DỮ LIỆU MẪU: 10 tuần đề xuất đã đóng (có chi phí) + đề xuất đang ở từng bước, để thử dashboard/dự báo."""
+    import random
+    from decimal import Decimal
+    from .defect_config import levels_of
+    rng=random.Random(2026)
+    creator,supervisor,approver=accounts['demo.nguoitao'],accounts['demo.giamsat'],accounts['demo.captren']
+    levels={t.id:{l.level:l for l in levels_of(db,t.id)} for t in types}
+    def make_case(serial,session,status,moment,type_,level,qty,priority=False):
+        unit=Unit(batch_id=batch.id,serial_number=serial,qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
+        lv=levels[type_.id][level]
+        case=DefectCase(code='DX-'+format(db.scalar(select(proposal_code_seq.next_value())),'04d'),unit_id=unit.id,inspection_session_id=session.id,created_by=creator.id,status=status,
+                        supervisor_id=supervisor.id,supervisor_name_snapshot=supervisor.display_name,priority=type_.priority_flag,max_level=level,detected_at=moment,
+                        submitted_at=moment if status!='nhap' else None,deadline_at=moment+timedelta(hours=lv.deadline_hours) if status!='nhap' else None,
+                        first_confirmed_at=moment+timedelta(hours=1) if status in ('cho_phuong_an','cho_cap_tren','dang_xu_ly','cho_dong','da_dong') else None,
+                        note='DỮ LIỆU MẪU · không dùng cho vận hành',created_at=moment,updated_at=moment,status_changed_at=moment)
+        db.add(case); db.flush()
+        db.add(CaseDefect(case_id=case.id,defect_type_id=type_.id,defect_type_name_snapshot=type_.name,defect_type_code_snapshot=type_.code,occurrence_count=qty,level=level,
+                          level_id=lv.id,level_criteria_snapshot=lv.criteria,priority_snapshot=type_.priority_flag,no_photo_reason='DỮ LIỆU MẪU: không có ảnh' if status!='nhap' else None))
+        db.add(StateHistory(case_id=case.id,from_status=None,to_status=status,action='tao_nhap',actor_id=creator.id,actor_kind='he_thong',reason='DỮ LIỆU MẪU',at=moment,meta={}))
+        return case,lv
+    # 10 tuần lịch sử: mỗi tuần một đợt kiểm 200 sản phẩm, 3–6 đề xuất đã đóng.
+    for week in range(10,0,-1):
+        week_start=started-timedelta(weeks=week)
+        session=InspectionSession(batch_id=batch.id,line='Dây chuyền 1',shift='Ca 1',stage='Kiểm tra cuối',inspected_count=200,sample_method='DỮ LIỆU MẪU',
+                                  population_key=f'DEMO-W{week}',started_at=week_start,ended_at=week_start+timedelta(days=5),status='closed',created_by=supervisor.id)
+        db.add(session); db.flush()
+        for j in range(rng.randint(3,6)):
+            type_=rng.choice(types); level=rng.choice(['nhe','trung_binh','trung_binh','nang']); qty=rng.randint(1,3)
+            moment=week_start+timedelta(days=rng.randint(0,4),hours=rng.randint(1,8))
+            case,lv=make_case(f'DEMO-H{week:02}{j}',session,'da_dong',moment,type_,level,qty)
+            method=rng.choice(['sua']*6+['tai_che','huy'])
+            est=(lv.market_price*qty) if method=='sua' else (product.unit_cost if method=='huy' else product.unit_cost-product.salvage_value)
+            db.add(Treatment(case_id=case.id,method=method,est_cost=est,est_source='gia_thi_truong' if method=='sua' else 'gia_von',est_sample_n=0,est_breakdown=[],
+                             deadline_at=case.deadline_at,needs_approval=method=='huy',approval_reasons=['Phương án Hủy'] if method=='huy' else [],status='hieu_luc',
+                             decided_by=supervisor.id,decided_at=moment+timedelta(hours=2),approved_by=approver.id if method=='huy' else None))
+            actual=(est*Decimal(str(rng.uniform(0.7,1.3)))).quantize(Decimal('1'))
+            db.add(CostActual(case_id=case.id,material=actual,hours=0,hourly_rate=0,other=0,total=actual,root_causes=[rng.choice(['Máy móc','Con người','Nguyên vật liệu','Phương pháp'])],
+                              entered_by=supervisor.id,entered_at=moment+timedelta(days=1)))
+            case.closed_at=moment+timedelta(days=1,hours=2); case.result=method
+            db.add(CostEntry(case_id=case.id,category='xu_ly_thuc_te',amount=actual,currency='VND',cost_status='actual',source_reference=f'{case.code}:demo'))
+    # Đợt đang kiểm hôm nay + đề xuất ở từng bước.
+    today=InspectionSession(batch_id=batch.id,line='Dây chuyền 1',shift='Ca 1',stage='Kiểm tra cuối',sample_method='DỮ LIỆU MẪU',
+                            population_key='DEMO-TODAY',started_at=started,inspected_count=120,created_by=supervisor.id)
+    db.add(today); db.flush()
+    plan=[('nhap',0,'nhe'),('nhap',1,'trung_binh'),('cho_minh_chung',0,'nhe'),('cho_minh_chung',1,'nang'),('cho_xac_nhan',0,'trung_binh'),('cho_xac_nhan',2,'nhe'),
+          ('cho_phuong_an',1,'trung_binh'),('cho_cap_tren',2,'nang'),('dang_xu_ly',0,'trung_binh'),('cho_dong',1,'nhe')]
+    for n,(status,t,level) in enumerate(plan):
+        case,lv=make_case(f'DEMO-{n+1:04}',today,status,started+timedelta(minutes=10*n),types[t],level,1+n%2)
+        if status in ('cho_cap_tren','dang_xu_ly','cho_dong'):
+            db.add(Treatment(case_id=case.id,method='sua',est_cost=lv.market_price*(1+n%2),est_source='gia_thi_truong',est_sample_n=0,est_breakdown=[],deadline_at=case.deadline_at,
+                             needs_approval=status=='cho_cap_tren',approval_reasons=['Có lỗi ưu tiên'] if status=='cho_cap_tren' else [],
+                             status='cho_duyet' if status=='cho_cap_tren' else 'hieu_luc',decided_by=supervisor.id,decided_at=started+timedelta(minutes=10*n+5)))
+        if status=='cho_dong':
+            db.add(CostActual(case_id=case.id,material=lv.market_price,hours=0,hourly_rate=0,other=0,total=lv.market_price,root_causes=['Máy móc'],entered_by=supervisor.id))
+    db.flush()
+
+
 def seed_demo(password_env):
     from sqlalchemy.engine import make_url
     database=make_url(DATABASE_URL).database or ''
@@ -92,7 +150,6 @@ def seed_demo(password_env):
         p=ProductType(sku='DEMO-SP01',name='DỮ LIỆU MẪU · Cụm sản phẩm A',unit_of_measure='cái',supervisor_id=accounts['demo.giamsat'].id,backup_supervisor_id=accounts['demo.giamsat2'].id,unit_cost=__import__('decimal').Decimal('900000'),salvage_value=__import__('decimal').Decimal('150000')); db.add(p); db.flush()
         b=Batch(product_type_id=p.id,lot_code='DEMO-LOT-001'); db.add(b); db.flush()
         started=now().replace(hour=1,minute=0,second=0,microsecond=0)
-        s=InspectionSession(batch_id=b.id,line='Dây chuyền mẫu A',shift='Ca 1',stage='Kiểm tra cuối',inspected_count=100,sample_method='DỮ LIỆU MẪU · kiểm 100 sản phẩm độc lập',population_key='DEMO-population-100',started_at=started,created_by=admin.id); db.add(s)
         types=[DefectType(code='DEMO-SCRATCH',name='Trầy xước'),DefectType(code='DEMO-DIMENSION',name='Sai kích thước'),DefectType(code='DEMO-CRACK',name='Nứt bề mặt',priority_flag=True)]
         db.add_all(types); db.flush()
         from .defect_config import ensure_levels, levels_of
@@ -103,21 +160,8 @@ def seed_demo(password_env):
             for l in levels_of(db,t.id):
                 l.criteria=criteria[l.level]+' · DỮ LIỆU MẪU'; l.market_price=__import__('decimal').Decimal(prices[l.level]); l.price_effective_from=started.date()
                 db.add(MarketPriceHistory(level_id=l.id,price=l.market_price,effective_from=l.price_effective_from,reason='DỮ LIỆU MẪU'))
-        level_of={'DEMO-SCRATCH':'nhe','DEMO-DIMENSION':'trung_binh','DEMO-CRACK':'nang'}
-        for i in range(10):
-            unit=Unit(batch_id=b.id,serial_number=f'DEMO-{i+1:04}',qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
-            status='cho_phuong_an' if i<8 else 'nhap'
-            case=DefectCase(code='DX-'+format(db.scalar(select(proposal_code_seq.next_value())),'04d'),unit_id=unit.id,inspection_session_id=s.id,created_by=inspector.id,status=status,
-                            supervisor_id=accounts['demo.giamsat'].id,supervisor_name_snapshot=accounts['demo.giamsat'].display_name,priority=types[i%3].priority_flag,max_level=level_of[types[i%3].code],
-                            detected_at=started+timedelta(minutes=i+1),submitted_at=started+timedelta(minutes=i+1) if i<8 else None,
-                            first_confirmed_at=started+timedelta(minutes=i+2) if i<8 else None,deadline_at=started+timedelta(hours=24) if i<8 else None,note='DỮ LIỆU MẪU · không dùng cho vận hành'); db.add(case); db.flush()
-            db.add(StateHistory(case_id=case.id,from_status=None,to_status=status,action='tao_nhap',actor_id=inspector.id,actor_kind='he_thong',reason='DỮ LIỆU MẪU',meta={}))
-            level=next(l for l in levels_of(db,types[i%3].id) if l.level==level_of[types[i%3].code])
-            defect=CaseDefect(level_id=level.id,level_criteria_snapshot=level.criteria,case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,level=level_of[types[i%3].code],priority_snapshot=types[i%3].priority_flag); db.add(defect); db.flush()
-            if i<4:
-                cost=CostEntry(case_id=case.id,category='repair',amount=__import__('decimal').Decimal('125000.00'),currency='VND',cost_status='actual',source_reference='DEMO-COST-'+str(i)); db.add(cost); db.flush()
-                db.add(CostAllocation(cost_entry_id=cost.id,case_defect_id=defect.id,allocated_amount=cost.amount))
-        db.add(AuditLog(actor_id=admin.id,action='seed_demo',entity_type='database',entity_id=database,changed_fields={'expected':{'inspected':100,'defective':8,'occurrences':12}},reason='DỮ LIỆU MẪU',request_id=uid())); db.commit()
+        seed_history(db,accounts,p,b,types,started)
+        db.add(AuditLog(actor_id=admin.id,action='seed_demo',entity_type='database',entity_id=database,changed_fields={'demo':'10 tuần lịch sử + đề xuất ở mọi bước'},reason='DỮ LIỆU MẪU',request_id=uid())); db.commit()
     print('DỮ LIỆU MẪU đã tạo. Tài khoản: '+', '.join(a[0] for a in DEMO_ACCOUNTS))
 
 def demo_accounts_only(password_env):

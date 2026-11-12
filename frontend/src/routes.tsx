@@ -16,6 +16,7 @@ import Detail from './screens/Detail';
 import Scan from './screens/Scan';
 import Notifications from './screens/Notifications';
 import Search from './screens/Search';
+import Dashboard from './screens/Dashboard';
 import './screens/Review';
 import './screens/TreatmentStep';
 import './screens/CompleteStep';
@@ -48,6 +49,7 @@ export const ROUTES: Record<string, Entry> = {
   'tao': { roles: ['nguoi_tao', 'quan_ly'], render: (r) => <Create key={r.parts[1] || 'new'} editId={r.parts[1]} token={r.params.get('qr') || r.params.get('serial') || undefined} /> },
   'thong-bao': { render: () => <Notifications /> },
   'tra-cuu': { render: () => <Search /> },
+  'tong-quan': { roles: ['quan_ly', 'admin', 'cap_tren'], render: () => <Dashboard /> },
   'quet': { render: (r) => <Scan key={r.parts[1] || ''} token={r.parts[1]} /> },
   'de-xuat': { render: (r, session) => {
     const [, id, sub] = r.parts;

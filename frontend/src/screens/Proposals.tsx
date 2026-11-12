@@ -23,24 +23,24 @@ export function ProposalCard({ p }: { p: Row }) {
   </a>;
 }
 
-type Filter = 'tat_ca' | 'cho_minh_chung' | 'cho_xac_nhan' | 'qua_han' | 'uu_tien' | 'nhap' | 'cho_phuong_an' | 'dang_xu_ly' | 'cho_dong' | 'cho_cap_tren' | 'da_dong';
+type Filter = 'dang_mo' | 'tat_ca' | 'cho_minh_chung' | 'cho_xac_nhan' | 'qua_han' | 'uu_tien' | 'nhap' | 'cho_phuong_an' | 'dang_xu_ly' | 'cho_dong' | 'cho_cap_tren' | 'da_dong';
 
-export default function ProposalList({ title, subtitle, view, canCreate, extraFilters = [] }: { title: string; subtitle?: string; view: string; canCreate?: boolean; extraFilters?: { value: Filter; label: string }[] }) {
-  const [filter, setFilter] = useState<Filter>('tat_ca');
+export default function ProposalList({ title, subtitle, view, canCreate, extraFilters = [], defaultFilter = 'tat_ca' }: { title: string; subtitle?: string; view: string; canCreate?: boolean; extraFilters?: { value: Filter; label: string }[]; defaultFilter?: Filter }) {
+  const [filter, setFilter] = useState<Filter>(defaultFilter);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const { data, loading, error, reload } = useLoad((s) => get('/defect-cases' + query({ view, filter, search, page, page_size: 20 }), s), [view, filter, search, page]);
   const counts = data?.counts || {};
   const options: { value: Filter; label: string; count?: number }[] = [
-    { value: 'tat_ca', label: 'Tất cả' }, { value: 'cho_minh_chung', label: 'Chờ minh chứng', count: counts.cho_minh_chung },
+    ...(defaultFilter === 'dang_mo' ? [{ value: 'dang_mo' as Filter, label: 'Đang mở' }] : []), { value: 'tat_ca', label: 'Tất cả' }, { value: 'cho_minh_chung', label: 'Chờ minh chứng', count: counts.cho_minh_chung },
     { value: 'cho_xac_nhan', label: 'Chờ xác nhận', count: counts.cho_xac_nhan }, { value: 'qua_han', label: 'Quá hạn', count: counts.qua_han },
     { value: 'uu_tien', label: 'Ưu tiên', count: counts.uu_tien }, ...extraFilters,
   ];
   return <div className="page">
-    <PageHeader title={title} subtitle={subtitle} actions={<>
+    {title && <PageHeader title={title} subtitle={subtitle} actions={<>
       <Button onClick={reload}>Làm mới</Button>
       {canCreate && <Button variant="primary" onClick={() => navigate('/tao')}><Plus size={18} aria-hidden /> Tạo đề xuất</Button>}
-    </>} />
+    </>} />}
     <Chips label="Lọc đề xuất" value={filter} onChange={(v) => { setFilter(v); setPage(1); }} options={options} />
     <input className="search" type="search" placeholder="Tìm mã DX hoặc serial…" aria-label="Tìm đề xuất" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} style={{ margin: '8px 0 14px', maxWidth: 360 }} />
     {loading && !data ? <Loading /> : error ? <ErrorBox error={error} onRetry={reload} /> : <>
