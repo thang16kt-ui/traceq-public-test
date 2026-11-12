@@ -148,3 +148,11 @@ def imported_summary(user:User=Depends(current_user),db:Session=Depends(get_anal
     overlap=len(set(pops))<len(pops)
     latest=db.scalar(select(ImportRun).where(ImportRun.status=='succeeded').order_by(ImportRun.processed_at.desc()).limit(1))
     return {'source':'validated_import_mirror','scope':{'basis':'all_imported_source_ids','measurement_basis':'inspection_opportunities'},'inspected_count':denominator,'defective_count':len(cases),'occurrence_count':occurrences,'defect_rate':round(len(cases)/denominator*100,4) if denominator and len(cases)<=denominator and not overlap else None,'numerator':len(cases),'denominator':denominator,'data_as_of':latest.processed_at.isoformat() if latest and latest.processed_at else None,'latest_import':row(latest) if latest else None,'warnings':['Phạm vi gồm toàn bộ dữ liệu đã nhập và hợp nhất theo ID/phiên bản. Đối soát các gói có phạm vi chồng lấn.']}
+
+
+@router.get('/estimate-accuracy')
+def estimate_accuracy_view(user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
+    """Sai số ước tính so với thực tế theo nguồn (chỉ đề xuất đã đóng). Không hứa độ chính xác: chỉ số đo."""
+    require_role(user,*REPORT_VIEWERS)
+    from .actuals import estimate_accuracy
+    return {'items':estimate_accuracy(db),'data_as_of':report_time(db)}

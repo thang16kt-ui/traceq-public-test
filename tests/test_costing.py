@@ -37,3 +37,21 @@ def test_routing_rules():
     assert approval_reasons(D('1'), threshold, 'huy', False) == ['Phương án Hủy']
     assert approval_reasons(D('1'), threshold, 'sua', True) == ['Có lỗi ưu tiên']
     assert 'Chưa ước tính' in approval_reasons(None, threshold, 'sua', False)[0]
+
+
+from backend.app.actuals import allocate, median, remove_outliers, robust_median
+
+
+def test_median_and_outlier_removal():
+    assert median([D(3), D(1), D(2)]) == D(2) and median([D(1), D(2), D(3), D(4)]) == D('2.5') and median([]) is None
+    values = [D(100), D(110), D(95), D(105), D(102), D(5000)]
+    assert D(5000) not in remove_outliers(values)
+    assert robust_median(values) == D(102)
+    assert remove_outliers([D(1), D(1000), D(5)]) == [D(1), D(5), D(1000)]  # < 4 mẫu: giữ nguyên
+
+
+def test_allocation_by_price_weight_and_fallback_to_quantity():
+    shares = allocate(D(300), [('a', 1, D(100)), ('b', 1, D(200))])
+    assert shares == {'a': D(100), 'b': D(200)}
+    fallback = allocate(D(300), [('a', 2, None), ('b', 1, D(200))])
+    assert fallback == {'a': D(200), 'b': D(100)}
