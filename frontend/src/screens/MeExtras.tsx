@@ -1,12 +1,50 @@
 import { useEffect, useState } from 'react';
 import { disablePush, enablePush, pushStatus } from '../lib/push';
-import { Button, useToast } from '../ui/components';
-// Phần mở rộng màn "Tôi" – được hoàn thiện ở hạng mục 10 (Web Push) và 13 (PWA/offline).
+import { Badge, Button, useToast } from '../ui/components';
+import { flushQueue, pendingCounts, pendingProposals } from '../lib/offline';
+import type { QueuedProposal } from '../lib/offline';
+import { formatTime } from '../lib/format';
+// Phần mở rộng màn "Tôi": đồng bộ offline, cài PWA, thông báo đẩy.
 export function SyncPanel() {
-  return <p className="muted">Chế độ làm việc offline chưa bật trong phiên bản này. Dữ liệu được gửi thẳng lên máy chủ.</p>;
+  const toast = useToast();
+  const [counts, setCounts] = useState({ photos: 0, proposals: 0 });
+  const [items, setItems] = useState<QueuedProposal[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  const refresh = () => { pendingCounts().then(setCounts); pendingProposals().then(setItems); };
+  useEffect(() => {
+    refresh();
+    const on = () => { setOnline(navigator.onLine); refresh(); };
+    window.addEventListener('traceq:queue', refresh); window.addEventListener('online', on); window.addEventListener('offline', on);
+    return () => { window.removeEventListener('traceq:queue', refresh); window.removeEventListener('online', on); window.removeEventListener('offline', on); };
+  }, []);
+  const total = counts.photos + counts.proposals;
+  return <div className="stack">
+    <p><Badge tone={online ? 'ok' : 'error'}>{online ? 'Đang có mạng' : 'Mất mạng'}</Badge> {total ? <Badge tone="warn">{counts.proposals} đề xuất, {counts.photos} ảnh chờ gửi</Badge> : <Badge tone="ok">Đã đồng bộ hết</Badge>}</p>
+    {items.map((p) => <p key={p.id} className="muted">Đề xuất serial {p.body.serial_number} lưu lúc {formatTime(p.createdAt)}{p.error ? ` – lỗi: ${p.error}` : ''}</p>)}
+    <Button busy={busy} disabled={!total || !online} onClick={async () => { setBusy(true); const left = await flushQueue(); setBusy(false); refresh(); toast(left ? `Còn ${left} mục chưa gửi được` : 'Đã đồng bộ xong', left ? 'error' : 'ok'); }}>Đồng bộ ngay</Button>
+    <p className="hint">Dữ liệu chờ gửi lưu trên máy này và bị xóa khi đăng xuất. Hãy đồng bộ trước khi đăng xuất.</p>
+  </div>;
 }
+
+let deferredPrompt: any = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
+
 export function InstallButton() {
-  return <p className="muted">Cài ứng dụng lên màn hình chính sẽ có ở phiên bản sau.</p>;
+  const [installed, setInstalled] = useState(window.matchMedia('(display-mode: standalone)').matches);
+  const [canPrompt, setCanPrompt] = useState(!!deferredPrompt);
+  useEffect(() => {
+    const ready = (e: Event) => { e.preventDefault(); deferredPrompt = e; setCanPrompt(true); };
+    const done = () => setInstalled(true);
+    window.addEventListener('beforeinstallprompt', ready); window.addEventListener('appinstalled', done);
+    return () => { window.removeEventListener('beforeinstallprompt', ready); window.removeEventListener('appinstalled', done); };
+  }, []);
+  if (installed) return <p><Badge tone="ok">Đã cài trên màn hình chính</Badge></p>;
+  const ios = /iPhone|iPad/.test(navigator.userAgent);
+  return <div className="stack">
+    {canPrompt && <Button variant="primary" onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; setCanPrompt(false); }}>Cài TraceQ lên màn hình chính</Button>}
+    {!canPrompt && <p className="muted">{ios ? 'Trên iPhone/iPad: mở bằng Safari, bấm nút Chia sẻ rồi chọn “Thêm vào MH chính”.' : 'Mở menu trình duyệt (⋮) và chọn “Cài đặt ứng dụng” hoặc “Thêm vào màn hình chính”.'}</p>}
+  </div>;
 }
 export function PushToggle() {
   const toast = useToast();

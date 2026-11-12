@@ -7,7 +7,8 @@ const STORES = ['photos', 'proposals'] as const;
 type Store = typeof STORES[number];
 
 export interface QueuedPhoto { id: string; caseId: string; itemId: string; kind: 'truoc' | 'sau'; blob: Blob; attempts?: number; error?: string }
-export interface QueuedProposal { id: string; body: any; attempts?: number; error?: string; createdAt: string }
+export interface QueuedPhotoForDraft { id: string; defectTypeId: string; blob: Blob }
+export interface QueuedProposal { id: string; body: any; photos?: QueuedPhotoForDraft[]; attempts?: number; error?: string; createdAt: string }
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -35,8 +36,18 @@ const remove = (store: Store, id: string) => tx(store, 'readwrite', (s) => { s.d
 
 function changed() { window.dispatchEvent(new Event('traceq:queue')); }
 
-export async function enqueuePhoto(photo: QueuedPhoto) { await put('photos', { ...photo, attempts: 0 }); changed(); }
-export async function enqueueProposal(item: QueuedProposal) { await put('proposals', { ...item, attempts: 0 }); changed(); }
+// Lưu ảnh dạng ArrayBuffer (Safari từng lỗi khi lưu Blob trong IndexedDB).
+async function packBlob(blob: Blob) { return { data: await blob.arrayBuffer(), type: blob.type || 'image/jpeg' }; }
+function unpack(item: any): Blob { return item.blob instanceof Blob ? item.blob : new Blob([item.data], { type: item.type || 'image/jpeg' }); }
+
+export async function enqueuePhoto(photo: QueuedPhoto) {
+  const { blob, ...rest } = photo;
+  await put('photos', { ...rest, ...(await packBlob(blob)), attempts: 0 }); changed();
+}
+export async function enqueueProposal(item: QueuedProposal) {
+  const photos = await Promise.all((item.photos || []).map(async ({ blob, ...rest }) => ({ ...rest, ...(await packBlob(blob)) })));
+  await put('proposals', { ...item, photos, attempts: 0 }); changed();
+}
 export async function pendingCounts() {
   try { return { photos: (await all('photos')).length, proposals: (await all('proposals')).length }; }
   catch { return { photos: 0, proposals: 0 }; }
@@ -50,12 +61,20 @@ export async function flushQueue(): Promise<number> {
   flushing = true;
   try {
     for (const p of await all<QueuedProposal>('proposals')) {
-      try { await api('/defect-cases', { method: 'POST', body: p.body, key: 'offline-' + p.id, retry: false }); await remove('proposals', p.id); }
+      try {
+        const created = await api('/defect-cases', { method: 'POST', body: p.body, key: 'offline-' + p.id, retry: false });
+        // Ảnh chụp lúc offline: gắn vào mục lỗi theo loại lỗi (duy nhất trong một đề xuất).
+        for (const photo of p.photos || []) {
+          const item = created.items.find((i: any) => i.defect_type_id === photo.defectTypeId);
+          if (item) await put('photos', { id: photo.id, caseId: created.id, itemId: item.id, kind: 'truoc', data: (photo as any).data, type: (photo as any).type, attempts: 0 });
+        }
+        await remove('proposals', p.id);
+      }
       catch (e: any) { if (e?.code === 'NETWORK' || e?.code === 'SERVER_STARTING') break; await put('proposals', { ...p, attempts: (p.attempts || 0) + 1, error: e?.message }); }
     }
     for (const p of await all<QueuedPhoto>('photos')) {
       const form = new FormData();
-      form.append('file', p.blob, 'anh.jpg'); form.append('kind', p.kind); form.append('photo_id', p.id);
+      form.append('file', unpack(p), 'anh.jpg'); form.append('kind', p.kind); form.append('photo_id', p.id);
       try { await api(`/defect-cases/${p.caseId}/items/${p.itemId}/photos`, { method: 'POST', body: form, key: p.id, retry: false }); await remove('photos', p.id); }
       catch (e: any) { if (e?.code === 'NETWORK' || e?.code === 'SERVER_STARTING') break; await put('photos', { ...p, attempts: (p.attempts || 0) + 1, error: e?.message }); }
     }
@@ -76,4 +95,19 @@ export function startBackgroundSync() {
   const timer = setInterval(run, 30000);
   run();
   return () => { window.removeEventListener('online', run); clearInterval(timer); };
+}
+
+/** GET có bản lưu dự phòng (danh mục, đợt kiểm) để mở form tạo đề xuất khi mất mạng. Không dùng cho dữ liệu nhạy cảm. */
+export async function cachedGet(path: string, signal?: AbortSignal) {
+  const keyName = 'traceq.cache.' + path;
+  try {
+    const data = await api(path, { signal, retry: false });
+    try { localStorage.setItem(keyName, JSON.stringify(data)); } catch { /* đầy bộ nhớ */ }
+    return data;
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw e;
+    const saved = (() => { try { return localStorage.getItem(keyName); } catch { return null; } })();
+    if (saved && (e?.code === 'NETWORK' || e?.code === 'SERVER_STARTING')) return { ...JSON.parse(saved), _offline: true };
+    throw e;
+  }
 }

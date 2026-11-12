@@ -9,13 +9,17 @@ import { navigate } from '../lib/router';
 import { safeStorage, useSession } from '../lib/session';
 import { Alert, Badge, Button, Card, ErrorBox, Loading, PageHeader, Segmented, Select, Stepper, TextArea, TextInput, useLoad, useToast } from '../ui/components';
 import { QrScanner } from './Scan';
+import { cachedGet, enqueueProposal } from '../lib/offline';
+import { compressImage } from '../lib/image';
+import { uploadPhoto } from './Evidence';
+import { Camera } from 'lucide-react';
 
-interface Item { key: string; defect_type_id: string; occurrence_count: number; level: string; note: string }
-const newItem = (): Item => ({ key: uuid(), defect_type_id: '', occurrence_count: 1, level: '', note: '' });
+interface Item { key: string; defect_type_id: string; occurrence_count: number; level: string; note: string; photos?: File[] }
+const newItem = (): Item => ({ key: uuid(), defect_type_id: '', occurrence_count: 1, level: '', note: '', photos: [] });
 
 export function QuickSession({ onCreated, batchId }: { onCreated: (s: Row) => void; batchId?: string }) {
-  const settings = useLoad((s) => get('/settings', s), []);
-  const batches = useLoad((s) => get('/batches?state=active&page_size=100', s), []);
+  const settings = useLoad((s) => cachedGet('/settings', s), []);
+  const batches = useLoad((s) => cachedGet('/batches?state=active&page_size=100', s), []);
   const [v, setV] = useState<Row>({ batch_id: batchId || '', line: '', shift: '', stage: '', inspected_count: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,6 +64,9 @@ function ItemEditor({ item, types, onChange, onRemove, index, canRemove, errors 
       options={LEVELS.map((l) => ({ value: l, label: LEVEL_LABELS[l], disabled: !levels.some((x: Row) => x.level === l) }))} />}
     {type && <p className="criteria"><strong>Tiêu chí của loại lỗi đã chọn:</strong> {level ? level.criteria : 'chọn mức độ để xem tiêu chí.'}</p>}
     <TextArea label="Ghi chú" value={item.note} onChange={(e) => onChange({ ...item, note: e.target.value })} placeholder="Vị trí lỗi, mô tả thêm…" />
+    <label className="btn file-btn"><Camera size={18} aria-hidden /> Chụp ảnh minh chứng (tùy chọn){item.photos?.length ? ` · ${item.photos.length} ảnh` : ''}
+      <input type="file" accept="image/*" capture="environment" multiple onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; onChange({ ...item, photos: [...(item.photos || []), ...files] }); }} /></label>
+    {!!item.photos?.length && <p className="muted">Ảnh được gửi cùng đề xuất (lưu trên máy nếu đang mất mạng). Có thể chụp thêm ở bước Chụp minh chứng.</p>}
   </section>;
 }
 
@@ -67,8 +74,8 @@ export default function Create({ editId, token }: { editId?: string; token?: str
   const { user } = useSession();
   const toast = useToast();
   const draftKey = `traceq.draft.${user.id}.${editId || 'new'}`;
-  const types = useLoad((s) => get('/defect-types?state=active&page_size=100', s), []);
-  const openSessions = useLoad((s) => get('/inspection-sessions?status=open&page_size=50', s), []);
+  const types = useLoad((s) => cachedGet('/defect-types?state=active&page_size=100', s), []);
+  const openSessions = useLoad((s) => cachedGet('/inspection-sessions?status=open&page_size=50', s), []);
   const existing = useLoad((s) => editId ? get(`/defect-cases/${editId}`, s) : Promise.resolve(null), [editId]);
   const [serial, setSerial] = useState('');
   const [scan, setScan] = useState<Row | null>(null);
@@ -90,7 +97,7 @@ export default function Create({ editId, token }: { editId?: string; token?: str
     if (raw) { try { const d = JSON.parse(raw); setSerial(d.serial || ''); setItems(d.items?.length ? d.items : [newItem()]); setNote(d.note || ''); if (d.sessionId) setSessionId(d.sessionId); setRestored(true); } catch { /* bỏ qua */ } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { if (!editId) safeStorage.set(draftKey, JSON.stringify({ serial, items, note, sessionId })); }, [serial, items, note, sessionId, editId, draftKey]);
+  useEffect(() => { if (!editId) safeStorage.set(draftKey, JSON.stringify({ serial, items: items.map(({ photos: _p, ...rest }) => rest), note, sessionId })); }, [serial, items, note, sessionId, editId, draftKey]);
   useEffect(() => {
     const d = existing.data;
     if (!d) return;
@@ -138,10 +145,25 @@ export default function Create({ editId, token }: { editId?: string; token?: str
     if (!validate()) { setError('Vui lòng điền đủ các mục bắt buộc'); return; }
     setBusy(true); setError('');
     const defects = items.map((i) => ({ defect_type_id: i.defect_type_id, occurrence_count: i.occurrence_count, level: i.level, note: i.note }));
+    const body = { id: clientId, inspection_session_id: sessionId, serial_number: serial.trim(), note, defects };
     try {
-      const result = editId
-        ? await patch(`/defect-cases/${editId}`, { row_version: existing.data.row_version, note, defects })
-        : await post('/defect-cases', { id: clientId, inspection_session_id: sessionId, serial_number: serial.trim(), note, defects });
+      let result;
+      try {
+        result = editId ? await patch(`/defect-cases/${editId}`, { row_version: existing.data.row_version, note, defects }) : await post('/defect-cases', body);
+      } catch (e: any) {
+        if (editId || !(e?.code === 'NETWORK' || e?.code === 'SERVER_STARTING')) throw e;
+        // Mất mạng / máy chủ ngủ: lưu bền trên máy (cùng UUID) và tự gửi khi có mạng – không tạo trùng.
+        const photos = await Promise.all(items.flatMap((i) => (i.photos || []).map(async (f) => ({ id: uuid(), defectTypeId: i.defect_type_id, blob: await compressImage(f) }))));
+        await enqueueProposal({ id: clientId, body, photos, createdAt: new Date().toISOString() });
+        safeStorage.remove(draftKey);
+        toast('Đang mất mạng: đề xuất đã lưu trên máy và sẽ tự gửi khi có mạng', 'info');
+        navigate('/toi', true);
+        return;
+      }
+      for (const item of items) {
+        const target = result.items.find((x: Row) => x.defect_type_id === item.defect_type_id);
+        for (const file of item.photos || []) { if (target) await uploadPhoto(result.id, target.id, file, 'truoc').catch(() => toast('Một ảnh chưa gửi được, hãy chụp lại ở bước minh chứng', 'error')); }
+      }
       safeStorage.remove(draftKey);
       safeStorage.set('traceq.lastSession.' + user.id, sessionId);
       const recent: string[] = JSON.parse(safeStorage.get('traceq.recentTypes.' + user.id) || '[]');

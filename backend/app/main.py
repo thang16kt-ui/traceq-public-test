@@ -59,7 +59,10 @@ async def requests(request,call_next):
     response.headers['X-Request-ID']=request.state.request_id
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Referrer-Policy']='no-referrer'
-    response.headers['Cache-Control']='no-store'
+    if request.url.path.startswith('/assets/'):
+        response.headers['Cache-Control']='public, max-age=31536000, immutable'  # tên file đã băm theo nội dung
+    elif 'cache-control' not in response.headers:
+        response.headers['Cache-Control']='no-store'
     logger.info(json.dumps({'request_id':request.state.request_id,'method':request.method,'status':response.status_code,'duration_ms':round((time.monotonic()-started)*1000,2)}))
     return response
 

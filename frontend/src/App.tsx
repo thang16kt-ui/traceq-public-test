@@ -65,6 +65,7 @@ export default function App() {
 
   const accept = useCallback((data: Row) => {
     setCSRF(data.csrf_token);
+    safeStorage.set('traceq.lastUser', JSON.stringify({ user: data.user, environment: data.environment }));
     setState({ loading: false, user: data.user, environment: data.environment });
     setRole(defaultRole(data.user));
   }, []);
@@ -72,10 +73,19 @@ export default function App() {
   const refreshUser = useCallback(async () => { accept(await get('/auth/me')); }, [accept]);
 
   useEffect(() => {
-    get('/auth/me').then(accept).catch(() => {
+    get('/auth/me').then(accept).catch((e) => {
+      // Mất mạng: mở app bằng hồ sơ đã lưu để vẫn tạo đề xuất offline; có mạng lại sẽ xác thực lại.
+      const saved = safeStorage.get('traceq.lastUser');
+      if (saved && (e?.code === 'NETWORK' || e?.code === 'SERVER_STARTING')) {
+        const data = JSON.parse(saved);
+        setState({ loading: false, user: data.user, environment: data.environment }); setRole(defaultRole(data.user));
+        const retry = () => get('/auth/me').then(accept).catch((err) => { if (err?.status === 401) setState((x) => ({ ...x, user: null })); });
+        window.addEventListener('online', retry, { once: true });
+        return;
+      }
       get('/auth/config').then((c) => setState({ loading: false, user: null, environment: c.environment })).catch(() => setState({ loading: false, user: null, environment: '' }));
     });
-    onUnauthorized(() => setState((s) => ({ ...s, user: null })));
+    onUnauthorized(() => { safeStorage.remove('traceq.lastUser'); setState((s) => ({ ...s, user: null })); });
   }, [accept]);
 
   useEffect(() => { if (state.user) return startBackgroundSync(); }, [state.user]);
@@ -96,7 +106,8 @@ export default function App() {
     logout: async () => {
       try { await post('/auth/logout'); } catch { /* vẫn xóa dữ liệu trên máy */ }
       await clearOffline();
-      safeStorage.clearPrefix('traceq.draft.');
+      safeStorage.clearPrefix('traceq.draft.'); safeStorage.clearPrefix('traceq.cache.'); safeStorage.remove('traceq.lastUser');
+      navigator.serviceWorker?.controller?.postMessage('clear-cache');
       window.dispatchEvent(new Event('traceq:logout'));
       setState((s) => ({ ...s, user: null })); navigate('/', true);
     },

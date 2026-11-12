@@ -54,7 +54,8 @@ export async function api(path: string, options: ApiOptions = {}): Promise<any> 
     } catch (error) {
       if (options.signal?.aborted) throw error;
       setServerState(navigator.onLine ? 'waking' : 'offline');
-      if (!canRetry || attempt >= RETRY_DELAYS.length) throw new ApiError(0, { code: 'NETWORK', message: navigator.onLine ? 'Chưa kết nối được máy chủ. Dữ liệu đang nhập vẫn được giữ, hãy thử lại.' : 'Thiết bị đang mất mạng. Dữ liệu đang nhập vẫn được giữ.' });
+      // Thiết bị mất mạng: báo ngay để lưu vào hàng đợi offline, không chờ thử lại.
+      if (!canRetry || !navigator.onLine || attempt >= RETRY_DELAYS.length) throw new ApiError(0, { code: 'NETWORK', message: navigator.onLine ? 'Chưa kết nối được máy chủ. Dữ liệu đang nhập vẫn được giữ, hãy thử lại.' : 'Thiết bị đang mất mạng. Dữ liệu đang nhập vẫn được giữ.' });
       await sleep(RETRY_DELAYS[attempt]);
       continue;
     }
@@ -62,6 +63,7 @@ export async function api(path: string, options: ApiOptions = {}): Promise<any> 
     const waking = [502, 503, 504].includes(response.status) || (!type.includes('application/json') && !response.ok);
     if (waking) {
       setServerState('waking');
+      if (write && attempt >= 2) throw new ApiError(503, { code: 'SERVER_STARTING', message: 'Máy chủ đang khởi động; dữ liệu được lưu trên máy và sẽ tự gửi.' });
       if (!canRetry || attempt >= RETRY_DELAYS.length) throw new ApiError(503, { code: 'SERVER_STARTING', message: 'Máy chủ đang khởi động hoặc quá tải. Vui lòng thử lại sau ít phút.' });
       await sleep(RETRY_DELAYS[attempt]);
       continue;
