@@ -222,6 +222,20 @@ class StateHistory(Base):
     meta = mapped_column(JSON, default=dict, nullable=False)
     __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='state_history_actor_kind_check'), Index('ix_state_history_case', 'case_id', 'at'))
 
+class AutoCheck(Base):
+    __tablename__ = 'auto_checks'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    decision_id = mapped_column(ForeignKey('decisions.id'), unique=True, nullable=False)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    step = mapped_column(String(20), nullable=False)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    result = mapped_column(String(5), nullable=True)
+    note = mapped_column(Text, nullable=True)
+    checked_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    checked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (CheckConstraint("result IS NULL OR result IN ('dung','sai')", name='auto_checks_result_check'), Index('ix_auto_checks_pending', 'result', 'created_at'))
+
 class Treatment(Base):
     __tablename__ = 'treatments'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
@@ -276,6 +290,9 @@ class Decision(Base):
     at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     reversible_until = mapped_column(DateTime(timezone=True), nullable=True)
     reversed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=True)  # loại lỗi chính (để học/tạm dừng theo loại)
+    context = mapped_column(JSON, nullable=True)
+    entered_at = mapped_column(DateTime(timezone=True), nullable=True)  # lúc đề xuất vào bước (đo thời gian duyệt)
     __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='decisions_actor_kind_check'),
                       Index('ix_decisions_case', 'case_id', 'at'), Index('ix_decisions_step', 'step', 'at'))
 

@@ -88,6 +88,23 @@ def on_transition(db, case, action, source, target, actor, actor_kind):
 AFTER_TRANSITION.append(on_transition)
 
 
+def apply_treatment(db, case, method, note, actor, request_id, actor_kind='nguoi', extra_meta=None):
+    """Tạo phương án + chuyển trạng thái (dùng cho người và cho tự động duyệt)."""
+    info = preview(db, case, method)
+    for old in db.scalars(select(Treatment).where(Treatment.case_id == case.id, Treatment.status.in_(('cho_duyet', 'hieu_luc')))):
+        old.status = 'thay_the'
+    t = Treatment(case_id=case.id, method=method, note=note, est_cost=Decimal(info['est_cost']) if info['est_cost'] is not None else None, est_source=info['est_source'],
+                  est_sample_n=info['est_sample_n'], est_breakdown=info['breakdown'], deadline_at=case.deadline_at,
+                  needs_approval=info['needs_approval'], approval_reasons=info['approval_reasons'],
+                  status='cho_duyet' if info['needs_approval'] else 'hieu_luc', decided_by=actor.id if actor else case.supervisor_id or case.created_by)
+    db.add(t)
+    db.flush()
+    transition(db, case, 'chot_phuong_an', actor, request_id, note or None, needs_approval=info['needs_approval'], actor_kind=actor_kind,
+               meta={'method': method, 'est_cost': info['est_cost'], 'est_source': info['est_source'], 'est_sample_n': info['est_sample_n'],
+                     'approval_reasons': info['approval_reasons'], **(extra_meta or {})})
+    return info
+
+
 @router.get('/defect-cases/{case_id}/estimate')
 def get_estimate(case_id: UUID, method: Literal['sua', 'tai_che', 'huy', 'khac'], user: User = Depends(current_user), db: Session = Depends(get_db)):
     return preview(db, get_case(db, user, case_id), method)
@@ -107,17 +124,6 @@ def choose_treatment(case_id: UUID, data: TreatmentIn, request: Request, user: U
             raise ApiError(403, 'FORBIDDEN', 'Bạn không có quyền chốt phương án cho đề xuất này')
         if data.method == 'khac' and len(data.note) < 3:
             raise ApiError(422, 'NOTE_REQUIRED', 'Phương án "Khác" cần mô tả trong ghi chú', {'note': 'Bắt buộc'})
-        info = preview(db, case, data.method)
-        for old in db.scalars(select(Treatment).where(Treatment.case_id == case.id, Treatment.status.in_(('cho_duyet', 'hieu_luc')))):
-            old.status = 'thay_the'
-        t = Treatment(case_id=case.id, method=data.method, note=data.note, est_cost=Decimal(info['est_cost']) if info['est_cost'] is not None else None, est_source=info['est_source'],
-                      est_sample_n=info['est_sample_n'], est_breakdown=info['breakdown'], deadline_at=case.deadline_at,
-                      needs_approval=info['needs_approval'], approval_reasons=info['approval_reasons'],
-                      status='cho_duyet' if info['needs_approval'] else 'hieu_luc', decided_by=user.id)
-        db.add(t)
-        db.flush()
-        transition(db, case, 'chot_phuong_an', user, request.state.request_id, data.note or None, needs_approval=info['needs_approval'],
-                   meta={'method': data.method, 'est_cost': info['est_cost'], 'est_source': info['est_source'],
-                         'est_sample_n': info['est_sample_n'], 'approval_reasons': info['approval_reasons']})
+        apply_treatment(db, case, data.method, data.note, user, request.state.request_id)
         return detail(db, user, case)
     return write(db, user, request, data.model_dump(mode='json'), action)

@@ -54,6 +54,8 @@ from .dashboard import router as dashboard_router
 app.include_router(dashboard_router)
 from .reports import router as reports_router
 app.include_router(reports_router)
+from .auto import router as auto_router
+app.include_router(auto_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

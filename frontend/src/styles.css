@@ -316,3 +316,9 @@ h3.sub { font-size: .95rem; margin: 14px 0 8px; }
 .stack-bar span { display: block; height: 100%; }
 .embedded-list .page { padding: 0; }
 .embedded-list .fab { display: none; }
+.auto-step { border-bottom: 1px solid var(--line); padding: 8px 0 12px; }
+.auto-step h3 { font-size: 1rem; margin-bottom: 6px; }
+.progress { margin: 6px 0; }
+.progress-label { font-size: .85rem; color: var(--ink-2); margin-bottom: 4px; }
+.progress-track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+.progress-track span { display: block; height: 100%; background: var(--brand); }
