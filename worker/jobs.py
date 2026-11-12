@@ -10,12 +10,14 @@ _last_alerts = 0.0
 def periodic_jobs(engine, force=False):
     global _last_alerts
     from backend.app.notify import alerts_tick, send_pending_pushes
-    result = {'alerts': 0, 'pushes': 0}
+    from backend.app.reports import scheduled_reports
+    result = {'alerts': 0, 'pushes': 0, 'reports': 0}
     with Session(engine) as db:
         # Một scheduler chạy cảnh báo tại một thời điểm (nhiều tiến trình vẫn an toàn nhờ dedupe_key).
         if db.scalar(text('SELECT pg_try_advisory_xact_lock(71019501)')):
             if force or time.monotonic() - _last_alerts >= 60:
                 result['alerts'] = alerts_tick(db)
+                result['reports'] = scheduled_reports(db)
                 _last_alerts = time.monotonic()
             result['pushes'] = send_pending_pushes(db)
             db.commit()

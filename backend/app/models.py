@@ -470,6 +470,26 @@ class PushSubscription(Base):
     created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     last_error = mapped_column(Text, nullable=True)
 
+report_code_seq = Sequence('report_code_seq', metadata=Base.metadata)
+
+class ReportExport(Base):
+    __tablename__ = 'report_exports'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    code = mapped_column(String(20), unique=True, nullable=False)
+    kind = mapped_column(String(10), nullable=False)  # thu_cong | dinh_ky
+    format = mapped_column(String(5), nullable=False)
+    params = mapped_column(JSON, nullable=False)
+    period_key = mapped_column(String(40), nullable=True)
+    created_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    file_ref = mapped_column(String(300), nullable=False)
+    sha256 = mapped_column(String(64), nullable=False)
+    size_bytes = mapped_column(Integer, nullable=False)
+    delivery = mapped_column(JSON, nullable=False)
+    __table_args__ = (UniqueConstraint('kind', 'period_key', name='report_exports_period_key'),
+                      CheckConstraint("kind IN ('thu_cong','dinh_ky')", name='report_exports_kind_check'),
+                      CheckConstraint("format IN ('pdf','xlsx')", name='report_exports_format_check'))
+
 class AppSetting(Base):
     __tablename__ = 'app_settings'
     key = mapped_column(String(80), primary_key=True)
