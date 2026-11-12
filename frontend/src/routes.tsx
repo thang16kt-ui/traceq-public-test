@@ -16,6 +16,7 @@ import Detail from './screens/Detail';
 import Scan from './screens/Scan';
 import './screens/Review';
 import './screens/TreatmentStep';
+import './screens/CompleteStep';
 import DefectTypes from './screens/DefectTypes';
 import { ProductsScreen, SetupHub } from './screens/Catalog';
 

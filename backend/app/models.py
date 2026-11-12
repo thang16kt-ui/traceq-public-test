@@ -245,6 +245,22 @@ class Treatment(Base):
                       CheckConstraint("status IN ('cho_duyet','hieu_luc','bi_tu_choi','thay_the')", name='treatments_status_check'),
                       Index('ix_treatments_case', 'case_id', 'decided_at'))
 
+class CostActual(Base):
+    __tablename__ = 'cost_actuals'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False, index=True)
+    treatment_id = mapped_column(ForeignKey('treatments.id'), nullable=True)
+    material = mapped_column(Numeric(18, 2), nullable=False)
+    hours = mapped_column(Numeric(8, 2), nullable=False)
+    hourly_rate = mapped_column(Numeric(18, 2), nullable=False)
+    other = mapped_column(Numeric(18, 2), nullable=False)
+    total = mapped_column(Numeric(18, 2), nullable=False)
+    root_causes = mapped_column(JSON, nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
+    entered_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    entered_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (CheckConstraint('material >= 0 AND hours >= 0 AND hourly_rate >= 0 AND other >= 0 AND total >= 0', name='cost_actuals_nonnegative'),)
+
 class Decision(Base):
     __tablename__ = 'decisions'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
