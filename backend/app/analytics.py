@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
-from .auth import ApiError, current_user, require_role
+from .auth import REPORT_VIEWERS, ApiError, current_user, require_role
 from .db import engine
 from .models import *
 from .services import plain, row
@@ -64,7 +64,7 @@ def base_counts(db,scope):
 
 @router.get('/summary')
 def summary(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     result=base_counts(db,scope); cases=valid_cases(scope)
     costs=db.execute(select(CostEntry.currency,CostEntry.cost_status,func.sum(CostEntry.amount)).where(CostEntry.case_id.in_(cases)).group_by(CostEntry.currency,CostEntry.cost_status)).all()
     allocations=dict(db.execute(select(CostEntry.currency,func.sum(CostAllocation.allocated_amount)).join(CostEntry,CostAllocation.cost_entry_id==CostEntry.id).where(CostEntry.case_id.in_(cases)).group_by(CostEntry.currency)).all())
@@ -79,7 +79,7 @@ def summary(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db
 
 @router.get('/pareto')
 def pareto(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     rows=db.execute(select(DefectType.id,DefectType.code,DefectType.name,func.sum(CaseDefect.occurrence_count),func.count(distinct(CaseDefect.case_id))).join(CaseDefect,CaseDefect.defect_type_id==DefectType.id).where(CaseDefect.case_id.in_(valid_cases(scope))).group_by(DefectType.id).order_by(func.sum(CaseDefect.occurrence_count).desc(),DefectType.name)).all()
     total=sum(r[3] for r in rows); cumulative=0; items=[]
     severity_rank={'low':0,'medium':1,'high':2,'critical':3}
@@ -92,7 +92,7 @@ def pareto(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:
 
 @router.get('/trends')
 def trends(timezone:str='Asia/Ho_Chi_Minh',scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     try: zone=ZoneInfo(timezone)
     except (ZoneInfoNotFoundError,ValueError): raise ApiError(422,'INVALID_TIMEZONE','Múi giờ IANA không hợp lệ')
     sessions=db.scalars(select(InspectionSession).where(InspectionSession.id.in_(scoped_sessions(scope)))).all()
@@ -109,7 +109,7 @@ def trends(timezone:str='Asia/Ho_Chi_Minh',scope:dict=Depends(scope_filters),use
 
 @router.get('/groups')
 def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     ss=db.scalars(select(InspectionSession).where(InspectionSession.id.in_(scoped_sessions(scope)))).all()
     grouped=defaultdict(list)
     labels={}
@@ -129,13 +129,13 @@ def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope
 
 @router.get('/forecast')
 def forecast(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     counts=base_counts(db,scope)
     return {'status':'insufficient_data','message':'Chưa đủ dữ liệu để dự báo','model_version':None,'trained':False,'scope':counts['scope'],'data_as_of':counts['data_as_of'],'reasons':['MVP chưa triển khai và kiểm chứng mô hình dự báo.','Cần lịch sử liên tục, mẫu số cùng phạm vi, cách lấy mẫu và dữ liệu số dự kiến kiểm tra.','Cần kiểm chứng theo thời gian, so sánh baseline và khoảng bất định trước khi hiển thị dự báo.'],'requirements':['Lịch sử theo kỳ cùng định nghĩa và phạm vi','Phân biệt thay đổi quy trình/lấy mẫu','Số lượng dự kiến kiểm tra và thử nghiệm sai số theo thời gian']}
 
 @router.get('/imported-summary')
 def imported_summary(user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     records=db.scalars(select(AnalysisRecord)).all()
     by_type=defaultdict(list)
     for r in records: by_type[r.record_type].append(r.data)

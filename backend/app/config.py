@@ -7,5 +7,3 @@ COOKIE_SECURE = os.getenv('COOKIE_SECURE', 'true').lower() == 'true'
 DATA_DIR = Path(os.getenv('DATA_DIR', '/data')).resolve()
 SESSION_HOURS = int(os.getenv('SESSION_HOURS', '12'))
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')
-PUBLIC_DEMO_ACCESS = os.getenv('PUBLIC_DEMO_ACCESS', 'false').lower() == 'true'
-PUBLIC_DEMO_CATALOG_LOGIN = os.getenv('PUBLIC_DEMO_CATALOG_LOGIN', 'false').lower() == 'true'

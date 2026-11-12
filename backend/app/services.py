@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 from fastapi import Request
 from sqlalchemy import select, text, update
-from .auth import ApiError, case_access
+from .auth import MANAGERS, ApiError, case_access
 from .models import *
 
 def plain(value):
@@ -87,7 +87,7 @@ def replace_defects(db,case,defects,user):
         t=db.get(DefectType,type_id)
         if not t or (not t.is_active and type_id not in current): raise ApiError(422,'INVALID_DEFECT_TYPE','Loại lỗi không hợp lệ hoặc ngừng sử dụng')
         mark_catalog_used(db, DefectType, type_id)
-        if item.verified_cause and user.role=='inspector': raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
+        if item.verified_cause and not user.has(*MANAGERS): raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
         if type_id in current:
             d=current[type_id]
             for k,v in values.items(): setattr(d,k,v)

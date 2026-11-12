@@ -23,6 +23,8 @@ from sqlalchemy import text
 from backend.app.db import engine, SessionLocal
 from backend.app.models import Base, User, ProductType, Batch, DefectType
 
+import backend.app.main  # noqa: F401  (nạp mọi model trước create_all)
+
 TEST_PASSWORD = 'Test-passphrase-3zJ8A!'
 
 @pytest.fixture(scope='session', autouse=True)
@@ -38,6 +40,7 @@ def clean_database(database_schema):
     tables = ', '.join('"' + name + '"' for name in Base.metadata.tables)
     with engine.begin() as conn:
         conn.execute(text('TRUNCATE TABLE ' + tables + ' RESTART IDENTITY CASCADE'))
+        conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'Nhà máy chính')"))
     yield
 
 @pytest.fixture
@@ -45,8 +48,11 @@ def seed():
     from backend.app.auth import hash_password
     with SessionLocal() as db:
         users = {}
-        for role, username in [('admin', 'admin_test'), ('manager', 'manager_test'), ('inspector', 'inspector_test'), ('inspector', 'other_test')]:
-            user = User(username=username, display_name=username, role=role,
+        for roles, username in [(['admin', 'quan_ly'], 'admin_test'), (['quan_ly'], 'manager_test'),
+                                (['nguoi_tao'], 'inspector_test'), (['nguoi_tao'], 'other_test'),
+                                (['giam_sat'], 'supervisor_test'), (['giam_sat'], 'supervisor2_test'),
+                                (['cap_tren'], 'approver_test')]:
+            user = User(username=username, display_name=username, roles=roles,
                         password_hash=hash_password(TEST_PASSWORD), is_active=True)
             db.add(user)
             db.flush()

@@ -19,7 +19,7 @@ def initial_schema(monkeypatch):
         transaction=connection.begin()
         try:
             tables=','.join('"'+name+'"' for name in Base.metadata.tables)
-            connection.execute(text('DROP TABLE '+tables+' CASCADE'))
+            connection.execute(text('DROP TABLE IF EXISTS '+tables+' CASCADE'))
             connection.exec_driver_sql((Path(__file__).parents[1]/'migrations/001_initial.sql').read_text())
             connection.execute(text("INSERT INTO schema_migrations VALUES ('001',CURRENT_TIMESTAMP)"))
             class MigrationEngine:
@@ -50,7 +50,7 @@ def test_upgrade_preserves_existing_ids_names_and_links_and_can_run_twice(monkey
         assert saved['name']=='  Sản phẩm   cũ  ' and saved['name_key']=='sản phẩm cũ'
         assert saved['is_active'] and saved['row_version']==1
         assert str(connection.scalar(text('SELECT product_type_id FROM batches WHERE id=:id'),{'id':batch}))==product
-        assert connection.scalar(text('SELECT count(*) FROM schema_migrations'))==2
+        assert connection.scalar(text('SELECT count(*) FROM schema_migrations'))==len(list((Path(__file__).parents[1]/'migrations').glob('[0-9][0-9][0-9]_*.sql')))
         assert connection.scalar(text("SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='product_types' AND column_name='name_key'"))=='NO'
 
 
@@ -65,12 +65,13 @@ def test_upgrade_stops_on_existing_normalized_duplicates_without_changing_schema
         assert connection.scalar(text("SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='product_types' AND column_name='is_active'"))==0
 
 
-def test_fresh_database_runs_both_migrations(monkeypatch):
+def test_fresh_database_runs_all_migrations(monkeypatch):
     with initial_schema(monkeypatch) as connection:
         tables=','.join('"'+name+'"' for name in Base.metadata.tables)
-        connection.execute(text('DROP TABLE '+tables+' CASCADE'))
+        connection.execute(text('DROP TABLE IF EXISTS '+tables+' CASCADE'))
         cli.migrate()
-        assert set(connection.execute(text('SELECT version FROM schema_migrations')).scalars())=={'001','002'}
+        versions={p.name[:3] for p in (Path(__file__).parents[1]/'migrations').glob('[0-9][0-9][0-9]_*.sql')}
+        assert set(connection.execute(text('SELECT version FROM schema_migrations')).scalars())==versions
 
 
 def test_explicit_retirement_keeps_both_ids_and_audits_original_name(monkeypatch):

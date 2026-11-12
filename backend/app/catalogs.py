@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from .auth import ApiError, current_user, require_role
+from .auth import MANAGERS, ApiError, current_user, require_role
 from .catalog_keys import KEY_FIELDS, catalog_key, display_text
 from .db import get_db
 from .models import (AuditLog, Batch, CaseDefect, DefectCase, DefectType,
@@ -20,11 +20,7 @@ MODELS = {'product-types': ProductType, 'batches': Batch, 'defect-types': Defect
 
 
 def catalog_manager(user):
-    require_role(user, 'manager', 'admin')
-    # The shared demo identity must never pass privileged catalog operations,
-    # including sessions issued before this release when it already had admin.
-    if user.username == 'public.guest':
-        raise ApiError(403, 'CATALOG_LOGIN_REQUIRED', 'Đăng nhập tài khoản quản lý hoặc admin để thay đổi danh mục')
+    require_role(user, *MANAGERS)
 
 
 def catalog_lock(db):

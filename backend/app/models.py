@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
 def uid(): return str(uuid.uuid4())
@@ -13,22 +14,54 @@ class Versioned:
     updated_at = mapped_column(DateTime(timezone=True), default=now, onupdate=now, nullable=False)
     row_version = mapped_column(Integer, default=1, nullable=False)
 
+DEFAULT_SITE_ID = '00000000-0000-0000-0000-000000000001'
+ROLES = ('nguoi_tao', 'giam_sat', 'cap_tren', 'quan_ly', 'admin')
+
+class Site(Base):
+    __tablename__ = 'sites'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    name = mapped_column(String(160), nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
 class User(Base, Versioned):
     __tablename__ = 'users'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
     username = mapped_column(String(80), unique=True, nullable=False)
+    code = mapped_column(String(40), nullable=True)
     display_name = mapped_column(String(160), nullable=False)
-    role = mapped_column(String(20), nullable=False)
+    roles = mapped_column(ARRAY(String(20)), nullable=False)
     password_hash = mapped_column(Text, nullable=False)
     is_active = mapped_column(Boolean, default=True, nullable=False)
-    __table_args__ = (CheckConstraint("role in ('inspector','manager','admin')"),)
+    locked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_reason = mapped_column(Text, nullable=True)
+    failed_logins = mapped_column(Integer, default=0, server_default='0', nullable=False)
+    locked_until = mapped_column(DateTime(timezone=True), nullable=True)
+    must_change_password = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    last_login_at = mapped_column(DateTime(timezone=True), nullable=True)
+    away_until = mapped_column(DateTime(timezone=True), nullable=True)
+    notify_prefs = mapped_column(JSON, default=dict, server_default='{}', nullable=False)
+    __table_args__ = (
+        CheckConstraint("cardinality(roles) > 0 AND roles <@ ARRAY['nguoi_tao','giam_sat','cap_tren','quan_ly','admin']::varchar(20)[]", name='users_roles_valid'),
+        Index('ix_users_code_lower', func.lower(code), unique=True, postgresql_where=code.isnot(None)),
+    )
+
+    def has(self, *roles):
+        return any(r in (self.roles or ()) for r in roles)
 
 class AuthSession(Base):
     __tablename__ = 'auth_sessions'
     token_hash = mapped_column(String(64), primary_key=True)
-    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    id = mapped_column(Uuid(as_uuid=False), unique=True, default=uid, nullable=False)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
     csrf_token = mapped_column(String(100), nullable=False)
     expires_at = mapped_column(DateTime(timezone=True), nullable=False)
+    device_label = mapped_column(String(160), default='', server_default='', nullable=False)
+    user_agent = mapped_column(String(300), default='', server_default='', nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    last_seen_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    revoked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    remember = mapped_column(Boolean, default=False, server_default='false', nullable=False)
 
 class LoginAttempt(Base):
     __tablename__ = 'login_attempts'

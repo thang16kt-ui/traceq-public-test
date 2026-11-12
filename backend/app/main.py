@@ -14,10 +14,10 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from .auth import *
-from .config import APP_ORIGIN, COOKIE_SECURE, DATA_DIR, ENVIRONMENT, SESSION_HOURS
+from .config import APP_ORIGIN, DATA_DIR
 from .db import engine, get_db
 from .migrations import SCHEMA_VERSION
-from .catalogs import router as catalog_router, catalog_lock, active_batch, catalog_manager
+from .catalogs import router as catalog_router, catalog_lock, active_batch
 from .models import *
 from .schemas import *
 from .services import advisory_lock, audit, bump, case_detail, get_case, mark_catalog_used, payload_hash, plain, replace_defects, row, write
@@ -30,6 +30,8 @@ logger.propagate=False
 app=FastAPI(title='TraceQ — Quản lý chất lượng bằng QR',version='1.0.0',description='MVP PostgreSQL. Cookie phiên + X-CSRF-Token và Idempotency-Key cho thao tác ghi. Các kỳ dùng cohort đợt kiểm tra [period_start,period_end).')
 PREFIX='/api/v1'
 app.include_router(catalog_router)
+from .accounts import router as accounts_router
+app.include_router(accounts_router)
 
 @app.middleware('http')
 async def requests(request,call_next):
@@ -67,49 +69,10 @@ def ready(db:Session=Depends(get_db)):
     if version!=SCHEMA_VERSION: raise ApiError(503,'SCHEMA_NOT_READY','Chưa áp dụng migration')
     return {'status':'ready','schema_version':version}
 
-@app.post(PREFIX+'/auth/catalog-login',tags=['Phiên'])
-@app.post(PREFIX+'/auth/login',tags=['Phiên'])
-def login(data:LoginIn,request:Request,response:Response,db:Session=Depends(get_db)):
-    check_origin(request)
-    address=request.client.host if request.client else 'unknown'
-    advisory_lock(db,'login:'+address)
-    attempts=db.scalar(select(func.count()).select_from(LoginAttempt).where(LoginAttempt.address==address,LoginAttempt.attempted_at>now()-timedelta(minutes=5)))
-    if attempts>=20: raise ApiError(429,'RATE_LIMITED','Quá nhiều lần đăng nhập; thử lại sau 5 phút')
-    demo_entry=request.url.path.endswith('/catalog-login') and demo_catalog_login()
-    if demo_entry:
-        user=demo_catalog_user(db)
-    else:
-        user=db.scalar(select(User).where(User.username==data.username))
-        if not user or not user.is_active or not verify_password(data.password,user.password_hash):
-            db.add(LoginAttempt(address=address)); db.commit()
-            raise ApiError(401,'INVALID_CREDENTIALS','Tên đăng nhập hoặc mật khẩu không đúng')
-    if request.url.path.endswith('/catalog-login'): catalog_manager(user)
-    raw=secrets.token_urlsafe(40); csrf=secrets.token_urlsafe(32)
-    db.add(AuthSession(token_hash=token_hash(raw),user_id=user.id,csrf_token=csrf,expires_at=now()+timedelta(hours=SESSION_HOURS)))
-    audit(db,user,'public_catalog_login' if demo_entry else 'login','users',user.id,{},request.state.request_id,
-          'Bản test public: mật khẩu bất kỳ; danh tính quản lý dùng chung' if demo_entry else None)
-    db.commit()
-    response.set_cookie('session',raw,max_age=SESSION_HOURS*3600,httponly=True,secure=COOKIE_SECURE,samesite='lax',path='/')
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':csrf,'environment':ENVIRONMENT,'access_mode':'authenticated','catalog_demo_login':demo_catalog_login()}
-
-@app.get(PREFIX+'/auth/me',tags=['Phiên'])
-def me(request:Request,user:User=Depends(current_user)):
-    return {'user':{k:row(user)[k] for k in ('id','username','display_name','role')},'csrf_token':request.state.auth_session.csrf_token,'environment':ENVIRONMENT,'access_mode':'public_demo' if user.username=='public.guest' and public_demo_access() else 'authenticated','catalog_demo_login':demo_catalog_login()}
-
-@app.post(PREFIX+'/auth/logout',tags=['Phiên'])
-def logout(request:Request,response:Response,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    db.delete(request.state.auth_session); audit(db,user,'logout','users',user.id,{},request.state.request_id); db.commit()
-    response.delete_cookie('session',path='/'); return {'logged_out':True}
-
 def listing(db,model,page=1,page_size=50,conditions=(),order=None):
     total=db.scalar(select(func.count()).select_from(model).where(*conditions))
     stmt=select(model).where(*conditions).order_by(order or model.created_at.desc()).offset((page-1)*page_size).limit(page_size)
     return {'items':[row(x) for x in db.scalars(stmt)],'total':total,'page':page,'page_size':page_size}
-
-@app.get(PREFIX+'/users',tags=['Quản trị'])
-def users(user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin')
-    return {'items':[{k:row(u)[k] for k in ('id','username','display_name','role','is_active')} for u in db.scalars(select(User).where(User.is_active==True).limit(100))]}
 
 @app.get(PREFIX+'/inspection-sessions',tags=['Đợt kiểm tra'])
 def sessions(page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -132,7 +95,7 @@ def create_session(data:SessionIn,request:Request,user:User=Depends(current_user
 
 @app.patch(PREFIX+'/inspection-sessions/{session_id}',tags=['Đợt kiểm tra'])
 def patch_session(session_id:uuid.UUID,data:SessionPatch,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*MANAGERS)
     def action():
         obj=db.scalar(select(InspectionSession).where(InspectionSession.id==str(session_id)).with_for_update())
         if not obj: raise ApiError(404,'NOT_FOUND','Đợt kiểm tra không tồn tại')
@@ -175,7 +138,7 @@ def create_case(data:CaseIn,request:Request,user:User=Depends(current_user),db:S
 @app.get(PREFIX+'/defect-cases',tags=['Hồ sơ'])
 def cases(page:int=Query(1,ge=1),page_size:int=Query(25,ge=1,le=100),status:str|None=None,search:str=Query('',max_length=100),inspection_session_id:uuid.UUID|None=None,user:User=Depends(current_user),db:Session=Depends(get_db)):
     conditions=[]
-    if user.role=='inspector': conditions.append(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))
+    if not user.has(*MANAGERS): conditions.append(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))
     if status:
         if status not in ('draft','confirmed','in_progress','recheck','closed','cancelled'): raise ApiError(422,'INVALID_FILTER','Trạng thái không hợp lệ')
         conditions.append(DefectCase.status==status)
@@ -194,13 +157,13 @@ def qr(token:str,batch_id:uuid.UUID|None=None,user:User=Depends(current_user),db
     if not unit:
         stmt=select(Unit).where(Unit.serial_number==token)
         if batch_id: stmt=stmt.where(Unit.batch_id==str(batch_id))
-        if user.role=='inspector': stmt=stmt.where(Unit.id.in_(select(DefectCase.unit_id).where(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))))
+        if not user.has(*MANAGERS): stmt=stmt.where(Unit.id.in_(select(DefectCase.unit_id).where(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))))
         candidates=db.scalars(stmt.limit(2)).all()
         if len(candidates)>1: raise ApiError(409,'AMBIGUOUS_SERIAL','Serial thuộc nhiều lô; quét đúng QR hoặc chọn batch_id')
         unit=candidates[0] if candidates else None
     if not unit: raise ApiError(404,'NOT_FOUND','Không tìm thấy mã QR hoặc serial')
     stmt=select(DefectCase).where(DefectCase.unit_id==unit.id)
-    if user.role=='inspector': stmt=stmt.where(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))
+    if not user.has(*MANAGERS): stmt=stmt.where(or_(DefectCase.created_by==user.id,DefectCase.assigned_to==user.id))
     objs=db.scalars(stmt.order_by(DefectCase.created_at.desc())).all()
     if not objs: raise ApiError(404,'NOT_FOUND','Không tìm thấy hồ sơ trong phạm vi được phép')
     return {'unit':row(unit),'cases':[case_detail(db,o) for o in objs]}
@@ -241,12 +204,12 @@ def patch_case(case_id:uuid.UUID,data:CasePatch,request:Request,user:User=Depend
         if data.status:
             allowed={'draft':{'cancelled'},'confirmed':{'in_progress','cancelled'},'in_progress':{'recheck','cancelled'},'recheck':{'closed','in_progress','cancelled'},'closed':{'cancelled'},'cancelled':set()}
             if data.status not in allowed[obj.status]: raise ApiError(409,'INVALID_TRANSITION','Bước xử lý không hợp lệ')
-            if data.status in ('closed','cancelled'): require_role(user,'manager','admin')
+            if data.status in ('closed','cancelled'): require_role(user,*MANAGERS)
             if data.status=='closed' and not data.result: raise ApiError(422,'RESULT_REQUIRED','Cần kết quả kiểm tra lại trước khi đóng')
             obj.status=data.status
-        if obj.status in ('closed','cancelled') and user.role=='inspector': raise ApiError(403,'FORBIDDEN','Chỉ quản lý sửa hồ sơ đã đóng hoặc hủy')
+        if obj.status in ('closed','cancelled') and not user.has(*MANAGERS): raise ApiError(403,'FORBIDDEN','Chỉ quản lý sửa hồ sơ đã đóng hoặc hủy')
         if data.assigned_to:
-            require_role(user,'manager','admin')
+            require_role(user,*MANAGERS)
             assigned=db.get(User,str(data.assigned_to))
             if not assigned or not assigned.is_active: raise ApiError(422,'INVALID_ASSIGNEE','Người phụ trách không hoạt động')
             obj.assigned_to=assigned.id
@@ -260,7 +223,7 @@ def patch_case(case_id:uuid.UUID,data:CasePatch,request:Request,user:User=Depend
 
 @app.post(PREFIX+'/defect-cases/{case_id}/costs',status_code=201,tags=['Chi phí'])
 def add_cost(case_id:uuid.UUID,data:CostIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*MANAGERS)
     def action():
         obj=get_case(db,user,case_id,True)
         if sum((a.allocated_amount for a in data.allocations),Decimal(0))>data.amount: raise ApiError(422,'OVER_ALLOCATED','Tổng phân bổ vượt khoản nguồn')
@@ -284,7 +247,7 @@ def label(unit_id:uuid.UUID,format:Literal['png','pdf']='png',width_mm:float=Que
     unit=db.get(Unit,str(unit_id))
     if not unit: raise ApiError(404,'NOT_FOUND','Không tìm thấy sản phẩm')
     objs=db.scalars(select(DefectCase).where(DefectCase.unit_id==unit.id)).all()
-    if user.role=='inspector' and not any(o.created_by==user.id or o.assigned_to==user.id for o in objs): raise ApiError(404,'NOT_FOUND','Không tìm thấy sản phẩm trong phạm vi được phép')
+    if not user.has(*MANAGERS) and not any(o.created_by==user.id or o.assigned_to==user.id for o in objs): raise ApiError(404,'NOT_FOUND','Không tìm thấy sản phẩm trong phạm vi được phép')
     batch=db.get(Batch,unit.batch_id); product=db.get(ProductType,batch.product_type_id)
     qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=10,border=4); qr.add_data(APP_ORIGIN+'/q/'+unit.qr_token); qr.make(fit=True)
     image=qr.make_image(fill_color='black',back_color='white').convert('RGB'); stream=io.BytesIO()
@@ -351,7 +314,7 @@ def attachment(attachment_id:uuid.UUID,user:User=Depends(current_user),db:Sessio
 
 @app.get(PREFIX+'/export-schedules',tags=['Xuất dữ liệu'])
 def schedules(user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); return listing(db,ExportSchedule,1,100)
+    require_role(user,*MANAGERS); return listing(db,ExportSchedule,1,100)
 @app.post(PREFIX+'/export-schedules',status_code=201,tags=['Xuất dữ liệu'])
 def schedule_create(data:ScheduleIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
     require_role(user,'admin')
@@ -383,7 +346,7 @@ def schedule_update(schedule_id:uuid.UUID,data:SchedulePatch,request:Request,use
     return write(db,user,request,data.model_dump(mode='json'),action)
 @app.post(PREFIX+'/export-runs',status_code=202,tags=['Xuất dữ liệu'])
 def export_create(data:ExportIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*MANAGERS)
     from worker.services import enqueue_run
     def action():
         if data.schedule_id and not db.get(ExportSchedule,str(data.schedule_id)): raise ApiError(422,'INVALID_SCHEDULE','Lịch không tồn tại')
@@ -393,22 +356,22 @@ def export_create(data:ExportIn,request:Request,user:User=Depends(current_user),
     return write(db,user,request,data.model_dump(mode='json'),action,202)
 @app.get(PREFIX+'/export-runs',tags=['Xuất dữ liệu'])
 def exports(page:int=Query(1,ge=1),page_size:int=Query(25,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); return listing(db,ExportRun,page,page_size)
+    require_role(user,*MANAGERS); return listing(db,ExportRun,page,page_size)
 @app.get(PREFIX+'/export-runs/{run_id}',tags=['Xuất dữ liệu'])
 def export_detail(run_id:uuid.UUID,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); obj=db.get(ExportRun,str(run_id))
+    require_role(user,*MANAGERS); obj=db.get(ExportRun,str(run_id))
     if not obj: raise ApiError(404,'NOT_FOUND','Không tìm thấy công việc')
     return row(obj)
 @app.get(PREFIX+'/export-runs/{run_id}/download',tags=['Xuất dữ liệu'])
 def export_download(run_id:uuid.UUID,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); obj=db.get(ExportRun,str(run_id))
+    require_role(user,*MANAGERS); obj=db.get(ExportRun,str(run_id))
     if not obj or obj.status!='succeeded' or not obj.file_path: raise ApiError(404,'NOT_READY','Gói xuất chưa hoàn tất')
     path=(DATA_DIR/obj.file_path).resolve()
     if not path.is_relative_to(DATA_DIR) or not path.is_file(): raise ApiError(404,'NOT_FOUND','Gói xuất không khả dụng')
     return FileResponse(path,media_type='application/zip',filename=f'export-{obj.id}-r{obj.revision}.zip')
 @app.post(PREFIX+'/export-runs/{run_id}/retry',status_code=202,tags=['Xuất dữ liệu'])
 def export_retry(run_id:uuid.UUID,data:RetryIn,request:Request,user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*MANAGERS)
     def action():
         obj=db.scalar(select(ExportRun).where(ExportRun.id==str(run_id)).with_for_update().execution_options(populate_existing=True))
         if not obj: raise ApiError(404,'NOT_FOUND','Không tìm thấy công việc')
@@ -422,10 +385,10 @@ def export_retry(run_id:uuid.UUID,data:RetryIn,request:Request,user:User=Depends
     return write(db,user,request,data.model_dump(mode='json'),action,202)
 @app.get(PREFIX+'/import-runs',tags=['Xuất dữ liệu'])
 def imports(page:int=Query(1,ge=1),page_size:int=Query(25,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); return listing(db,ImportRun,page,page_size)
+    require_role(user,*MANAGERS); return listing(db,ImportRun,page,page_size)
 @app.get(PREFIX+'/audit-logs',tags=['Quản trị'])
 def audits(page:int=Query(1,ge=1),page_size:int=Query(25,ge=1,le=100),user:User=Depends(current_user),db:Session=Depends(get_db)):
-    require_role(user,'manager','admin'); return listing(db,AuditLog,page,page_size)
+    require_role(user,*MANAGERS); return listing(db,AuditLog,page,page_size)
 
 from .analytics import router as analytics_router
 app.include_router(analytics_router,prefix=PREFIX)
@@ -441,18 +404,8 @@ def documented_openapi():
     for path,operations in schema['paths'].items():
         for method,operation in operations.items():
             if method not in ('get','post','patch','delete','put'): continue
-            if path.startswith(PREFIX) and path not in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'): operation['security']=[{'SessionCookie':[]}]
-            if path.startswith(PREFIX):
-                roles=['inspector','manager','admin']
-                if '/analytics/' in path or '/export-runs' in path or '/import-runs' in path or path.endswith('/audit-logs') or path.endswith('/users') or path.endswith('/costs'): roles=['manager','admin']
-                if '/export-schedules' in path: roles=['manager','admin'] if method=='get' else ['admin']
-                if (any(path.startswith(PREFIX+'/'+kind) for kind in ('product-types','batches','defect-types')) or '/{kind}/' in path) and (method!='get' or path.endswith('/history')):
-                    roles=['manager','admin']; operation['x-excludes-public-guest']=True
-                if path.startswith(PREFIX+'/inspection-sessions/') and method=='patch': roles=['manager','admin']
-                if path in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'): roles=[]
-                operation['x-required-roles']=roles
-                if '/defect-cases' in path or '/qr/' in path or '/units/' in path or '/attachments/' in path: operation['x-record-scope']='inspector: created_by or assigned_to; manager/admin: all; close/cancel/assign/verify-cause: manager/admin'
-            if method in ('post','patch','delete','put') and path not in (PREFIX+'/auth/login',PREFIX+'/auth/catalog-login'):
+            if path.startswith(PREFIX) and path!=PREFIX+'/auth/login': operation['security']=[{'SessionCookie':[]}]
+            if method in ('post','patch','delete','put') and path!=PREFIX+'/auth/login':
                 params=operation.setdefault('parameters',[])
                 if not any(p.get('name')=='X-CSRF-Token' for p in params): params.append({'name':'X-CSRF-Token','in':'header','required':True,'schema':{'type':'string'},'description':'csrf_token trả về từ đăng nhập hoặc /auth/me'})
                 if path!=PREFIX+'/auth/logout' and not any(p.get('name')=='Idempotency-Key' for p in params): params.append({'name':'Idempotency-Key','in':'header','required':True,'schema':{'type':'string','minLength':1,'maxLength':160},'description':'Giữ nguyên khóa và nội dung khi gửi lại sau timeout; đổi nội dung cùng khóa trả 409'})

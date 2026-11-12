@@ -83,7 +83,7 @@ def test_normalized_duplicate_is_rejected_even_when_archived(admin,seed,create_s
     assert send(admin,'POST','/'+kind,payload).status_code==409
 
 
-def test_manager_can_edit_but_inspector_and_public_guest_cannot_mutate(admin, clients, seed, monkeypatch):
+def test_manager_can_edit_but_creator_cannot_mutate(admin, clients, seed):
     item = find(admin,'product-types',seed['product_type_id'])
     body = {'sku':item['sku'],'name':'Sản phẩm đã sửa','unit_of_measure':'bộ'}
     for method, path, payload in [
@@ -93,28 +93,10 @@ def test_manager_can_edit_but_inspector_and_public_guest_cannot_mutate(admin, cl
         ('POST','/product-types',{'sku':'X','name':'X'}),
     ]:
         assert send(clients['inspector_test'],method,path,payload).status_code==403
-        monkeypatch.setattr(auth,'PUBLIC_DEMO_ACCESS',True);monkeypatch.setattr(auth,'ENVIRONMENT','demo')
-        with TestClient(app) as guest:
-            data=guest.get('/api/v1/auth/me').json()
-            guest.headers.update({'X-CSRF-Token':data['csrf_token'],'Origin':'http://testserver'})
-            assert data['user']['role']=='admin'  # even an old admin guest cannot bypass the guard
-            assert send(guest,method,path,payload).status_code==403
     updated = change(clients['manager_test'],'product-types',item,'edit',**body)
     assert updated.status_code==200, updated.text
     assert updated.json()['item']['name']=='Sản phẩm đã sửa'
     assert change(admin,'product-types',item,'edit',**body).json()['code']=='VERSION_CONFLICT'
-
-
-def test_privileged_login_rejects_inspector_and_identifies_manager(monkeypatch, seed):
-    from tests.conftest import TEST_PASSWORD
-    monkeypatch.setattr(auth,'PUBLIC_DEMO_ACCESS',True);monkeypatch.setattr(auth,'ENVIRONMENT','demo')
-    with TestClient(app) as client:
-        assert client.get('/api/v1/auth/me').json()['access_mode']=='public_demo'
-        denied=client.post('/api/v1/auth/catalog-login',json={'username':'inspector_test','password':TEST_PASSWORD})
-        assert denied.status_code==403
-        logged=client.post('/api/v1/auth/catalog-login',json={'username':'manager_test','password':TEST_PASSWORD})
-        assert logged.status_code==200,logged.text
-        assert client.get('/api/v1/auth/me').json()['access_mode']=='authenticated'
 
 
 def test_inactive_parents_block_new_records_and_require_parent_restore(admin, seed, create_session, create_case):
