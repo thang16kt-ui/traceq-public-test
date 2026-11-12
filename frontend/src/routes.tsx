@@ -15,6 +15,7 @@ import Evidence from './screens/Evidence';
 import Detail from './screens/Detail';
 import Scan from './screens/Scan';
 import Notifications from './screens/Notifications';
+import Search from './screens/Search';
 import './screens/Review';
 import './screens/TreatmentStep';
 import './screens/CompleteStep';
@@ -46,6 +47,7 @@ export const ROUTES: Record<string, Entry> = {
   'lich-su': { roles: ['cap_tren'], render: () => <ProposalList title="Lịch sử" subtitle="Đề xuất đã qua bước cấp trên" view="approved" extraFilters={[{ value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'da_dong', label: 'Đã đóng' }]} /> },
   'tao': { roles: ['nguoi_tao', 'quan_ly'], render: (r) => <Create key={r.parts[1] || 'new'} editId={r.parts[1]} token={r.params.get('qr') || r.params.get('serial') || undefined} /> },
   'thong-bao': { render: () => <Notifications /> },
+  'tra-cuu': { render: () => <Search /> },
   'quet': { render: (r) => <Scan key={r.parts[1] || ''} token={r.parts[1]} /> },
   'de-xuat': { render: (r, session) => {
     const [, id, sub] = r.parts;

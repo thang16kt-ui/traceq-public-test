@@ -1,7 +1,7 @@
 // Khung ứng dụng: đăng nhập, điều hướng theo vai trò, banner máy chủ đang khởi động.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bell, User as UserIcon } from 'lucide-react';
+import { Bell, Search as SearchIcon, User as UserIcon } from 'lucide-react';
 import { get, onServerState, onUnauthorized, post, setCSRF } from './lib/api';
 import type { Row, ServerState } from './lib/api';
 import { ROLE_LABELS } from './lib/labels';
@@ -34,6 +34,7 @@ function Shell({ session, children, path, unread }: { session: Session; children
       <a className="side-brand" href={'#' + HOME[activeRole]}><span className="logo" aria-hidden>TQ</span> TraceQ</a>
       <nav>{side.map((item) => <a key={item.path} href={'#' + item.path} className={`side-item ${isActive(item.path) ? 'active' : ''}`} aria-current={isActive(item.path) ? 'page' : undefined}><item.icon size={20} aria-hidden />{item.label}</a>)}</nav>
       <div className="side-foot">
+        <a href="#/tra-cuu" className={`side-item ${isActive('/tra-cuu') ? 'active' : ''}`}><SearchIcon size={20} aria-hidden />Tra cứu</a>
         <a href="#/thong-bao" className={`side-item ${isActive('/thong-bao') ? 'active' : ''}`}><Bell size={20} aria-hidden />Thông báo{unread > 0 && <span className="count">{unread}</span>}</a>
         <a href="#/toi" className={`side-item ${isActive('/toi') ? 'active' : ''}`}><UserIcon size={20} aria-hidden />{user.display_name}<small>{ROLE_LABELS[activeRole]}</small></a>
       </div>
@@ -41,6 +42,7 @@ function Shell({ session, children, path, unread }: { session: Session; children
     <header className="topbar">
       <a className="top-brand" href={'#' + HOME[activeRole]}><span className="logo" aria-hidden>TQ</span><span>TraceQ</span></a>
       <span className="top-role">{ROLE_LABELS[activeRole]}</span>
+      <a href="#/tra-cuu" className="icon-btn" aria-label="Tra cứu"><SearchIcon size={22} /></a>
       <a href="#/thong-bao" className="icon-btn" aria-label={`Thông báo${unread ? `, ${unread} chưa đọc` : ''}`}><Bell size={22} />{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}</a>
       <a href="#/toi" className="icon-btn" aria-label="Tôi"><UserIcon size={22} /></a>
     </header>

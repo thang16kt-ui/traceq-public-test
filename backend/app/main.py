@@ -48,6 +48,8 @@ from .completion import router as completion_router
 app.include_router(completion_router)
 from .notify import router as notify_router
 app.include_router(notify_router)
+from .search import router as search_router
+app.include_router(search_router)
 
 @app.middleware('http')
 async def requests(request,call_next):
