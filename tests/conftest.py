@@ -61,7 +61,8 @@ def seed():
             db.add(user)
             db.flush()
             users[username] = user.id
-        product = ProductType(sku='TEST-001', name='Sản phẩm thử nghiệm', unit_of_measure='cái')
+        product = ProductType(sku='TEST-001', name='Sản phẩm thử nghiệm', unit_of_measure='cái',
+                              supervisor_id=users['supervisor_test'], backup_supervisor_id=users['supervisor2_test'], unit_cost=1000000)
         db.add(product)
         db.flush()
         batch = Batch(product_type_id=product.id, lot_code='TEST-LOT-01')
@@ -125,11 +126,26 @@ def create_case(seed):
         return response.json()
     return create
 
+def step(client, case_id, action, reason=None, key=None):
+    """Gọi một bước chuyển trạng thái đơn giản với row_version hiện tại."""
+    version = client.get(f'/api/v1/defect-cases/{case_id}').json()['row_version']
+    body = {'action': action, 'row_version': version, **({'reason': reason} if reason else {})}
+    return client.post(f'/api/v1/defect-cases/{case_id}/transitions', json=body, headers={'Idempotency-Key': key or str(uuid.uuid4())})
+
+
+def submit_evidence(client, case_id):
+    """Gửi minh chứng bằng lý do 'không chụp được ảnh' cho mọi mục lỗi."""
+    detail = client.get(f'/api/v1/defect-cases/{case_id}').json()
+    body = {'row_version': detail['row_version'], 'no_photo_reasons': {i['id']: 'Không chụp được ảnh trong test' for i in detail['items']}}
+    return client.post(f'/api/v1/defect-cases/{case_id}/evidence/submit', json=body, headers={'Idempotency-Key': str(uuid.uuid4())})
+
+
 @pytest.fixture
-def confirm():
-    from datetime import datetime, timezone
-    def call(client, case_id, payload=None, key=None):
-        body = payload or {'client_event_id':str(uuid.uuid4()), 'observed_at':datetime.now(timezone.utc).isoformat()}
-        return client.post(f'/api/v1/defect-cases/{case_id}/confirm', json=body,
-                           headers={'Idempotency-Key': key or str(uuid.uuid4())})
+def confirm(clients):
+    """Đưa đề xuất tới bước 'Xác nhận lỗi' (sản phẩm được tính là lỗi). Trả phản hồi của bước xác nhận."""
+    def call(client, case_id):
+        assert step(client, case_id, 'gui_de_xuat').status_code == 200
+        response = submit_evidence(client, case_id)
+        assert response.status_code == 200, response.text
+        return step(clients['supervisor_test'], case_id, 'xac_nhan_loi')
     return call

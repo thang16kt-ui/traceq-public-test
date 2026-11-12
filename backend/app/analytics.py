@@ -42,7 +42,7 @@ def scoped_sessions(scope):
     return stmt
 
 def valid_cases(scope):
-    return select(DefectCase.id).where(DefectCase.inspection_session_id.in_(scoped_sessions(scope)),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='cancelled')
+    return select(DefectCase.id).where(DefectCase.inspection_session_id.in_(scoped_sessions(scope)),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='da_huy')
 
 def base_counts(db,scope):
     ids=scoped_sessions(scope); cases=valid_cases(scope)
@@ -121,7 +121,7 @@ def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope
         grouped[key].append(s); labels[key]=label
     items=[]
     for key,sessions in grouped.items():
-        ids=[s.id for s in sessions]; num=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id.in_(ids),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='cancelled'))
+        ids=[s.id for s in sessions]; num=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id.in_(ids),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='da_huy'))
         den=sum(s.inspected_count for s in sessions) if all(s.inspected_count is not None for s in sessions) else None
         overlap=len({s.population_key for s in sessions})<len(sessions)
         items.append({'id':key,'name':labels[key],'numerator':num,'denominator':den,'defect_rate':round(num/den*100,4) if den and num<=den and not overlap else None,'inspection_session_ids':ids})
@@ -140,7 +140,7 @@ def imported_summary(user:User=Depends(current_user),db:Session=Depends(get_anal
     by_type=defaultdict(list)
     for r in records: by_type[r.record_type].append(r.data)
     sessions=by_type.get('inspection_sessions',[])
-    cases=[c for c in by_type.get('defect_cases',[]) if c.get('first_confirmed_at') and c.get('status')!='cancelled']
+    cases=[c for c in by_type.get('defect_cases',[]) if c.get('first_confirmed_at') and c.get('status')!='da_huy']
     denominator=sum(int(s['inspected_count']) for s in sessions) if sessions and all(s.get('inspected_count') not in (None,'') for s in sessions) else None
     case_ids={str(c['id']) for c in cases}
     occurrences=sum(int(d['occurrence_count']) for d in by_type.get('case_defects',[]) if str(d.get('case_id')) in case_ids)

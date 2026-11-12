@@ -40,7 +40,7 @@ def test_new_parent_snapshot_replaces_children_and_old_snapshot_cannot_restore_t
     new = copy.deepcopy(old)
     new['export_id'] = str(uuid.uuid4()); new['revision'] = 2
     new['tables']['defect_cases'][0]['row_version'] = 2
-    new['tables']['defect_cases'][0]['status'] = 'cancelled'
+    new['tables']['defect_cases'][0]['status'] = 'da_huy'
     new['tables']['case_defects'] = []
     new['tables']['cost_allocations'] = []
     # A cost can remain on a cancelled case for accounting reconciliation.
@@ -53,7 +53,7 @@ def test_new_parent_snapshot_replaces_children_and_old_snapshot_cannot_restore_t
     import_package(engine, old_path)
     with SessionLocal() as db:
         case = db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type == 'defect_cases'))
-        assert case.row_version == 2 and case.data['status'] == 'cancelled'
+        assert case.row_version == 2 and case.data['status'] == 'da_huy'
         assert db.scalar(select(func.count()).select_from(AnalysisRecord).where(AnalysisRecord.record_type == 'case_defects')) == 0
         assert db.scalar(select(func.count()).select_from(AnalysisRecord).where(AnalysisRecord.record_type == 'cost_allocations')) == 0
         cost = db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type == 'cost_entries'))

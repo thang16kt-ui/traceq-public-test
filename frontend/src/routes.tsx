@@ -7,6 +7,7 @@ import { HOME } from './lib/nav';
 import { Empty, PageHeader } from './ui/components';
 import Me from './screens/Me';
 import Users from './screens/Users';
+import AuditLog from './screens/AuditLog';
 import DefectTypes from './screens/DefectTypes';
 import { ProductsScreen, SetupHub } from './screens/Catalog';
 
@@ -28,6 +29,7 @@ export const ROUTES: Record<string, Entry> = {
   'danh-muc': { roles: MANAGERS, render: () => <DefectTypes /> },
   'san-pham': { roles: MANAGERS, render: (r) => <ProductsScreen tab={r.parts[1]} /> },
   'thiet-lap': { roles: MANAGERS, render: () => <SetupHub /> },
+  'nhat-ky': { roles: MANAGERS, render: () => <AuditLog /> },
 };
 
 const TITLES: Record<string, string> = {

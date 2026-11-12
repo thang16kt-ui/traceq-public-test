@@ -120,9 +120,3 @@ def require_role(user, *roles):
 # Nhóm quyền dùng lặp lại.
 MANAGERS = ('quan_ly', 'admin')
 REPORT_VIEWERS = ('quan_ly', 'admin', 'cap_tren')
-
-
-def case_access(user, case):
-    """Phạm vi xem một đề xuất."""
-    if not (user.has(*MANAGERS) or case.created_by == user.id or case.assigned_to == user.id):
-        raise ApiError(404, 'NOT_FOUND', 'Không tìm thấy đề xuất trong phạm vi được phép')

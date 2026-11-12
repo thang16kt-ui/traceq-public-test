@@ -87,7 +87,7 @@ def seed_demo(password_env):
         if db.scalar(select(ProductType.id).limit(1)): raise SystemExit('Database không trống; không trộn dữ liệu mẫu')
         accounts=ensure_demo_accounts(db,password)
         admin=accounts['demo.admin']; inspector=accounts['demo.nguoitao']
-        p=ProductType(sku='DEMO-SP01',name='DỮ LIỆU MẪU · Cụm sản phẩm A',unit_of_measure='cái'); db.add(p); db.flush()
+        p=ProductType(sku='DEMO-SP01',name='DỮ LIỆU MẪU · Cụm sản phẩm A',unit_of_measure='cái',supervisor_id=accounts['demo.giamsat'].id,backup_supervisor_id=accounts['demo.giamsat2'].id,unit_cost=__import__('decimal').Decimal('900000'),salvage_value=__import__('decimal').Decimal('150000')); db.add(p); db.flush()
         b=Batch(product_type_id=p.id,lot_code='DEMO-LOT-001'); db.add(b); db.flush()
         started=now().replace(hour=1,minute=0,second=0,microsecond=0)
         s=InspectionSession(batch_id=b.id,line='Dây chuyền mẫu A',shift='Ca 1',stage='Kiểm tra cuối',inspected_count=100,sample_method='DỮ LIỆU MẪU · kiểm 100 sản phẩm độc lập',population_key='DEMO-population-100',started_at=started,created_by=admin.id); db.add(s)
@@ -104,9 +104,14 @@ def seed_demo(password_env):
         level_of={'DEMO-SCRATCH':'nhe','DEMO-DIMENSION':'trung_binh','DEMO-CRACK':'nang'}
         for i in range(10):
             unit=Unit(batch_id=b.id,serial_number=f'DEMO-{i+1:04}',qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
-            case=DefectCase(unit_id=unit.id,inspection_session_id=s.id,created_by=inspector.id,assigned_to=inspector.id,status='confirmed' if i<8 else 'draft',detected_at=started+timedelta(minutes=i+1),first_confirmed_at=started+timedelta(minutes=i+2) if i<8 else None,note='DỮ LIỆU MẪU · không dùng cho vận hành'); db.add(case); db.flush()
-            defect=CaseDefect(case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,level=level_of[types[i%3].code],priority_snapshot=types[i%3].priority_flag); db.add(defect); db.flush()
-            db.add(CaseEvent(case_id=case.id,event_type='confirmed' if i<8 else 'created',actor_id=inspector.id,reason='DỮ LIỆU MẪU'))
+            status='cho_phuong_an' if i<8 else 'nhap'
+            case=DefectCase(code='DX-'+format(db.scalar(select(proposal_code_seq.next_value())),'04d'),unit_id=unit.id,inspection_session_id=s.id,created_by=inspector.id,status=status,
+                            supervisor_id=accounts['demo.giamsat'].id,supervisor_name_snapshot=accounts['demo.giamsat'].display_name,priority=types[i%3].priority_flag,max_level=level_of[types[i%3].code],
+                            detected_at=started+timedelta(minutes=i+1),submitted_at=started+timedelta(minutes=i+1) if i<8 else None,
+                            first_confirmed_at=started+timedelta(minutes=i+2) if i<8 else None,deadline_at=started+timedelta(hours=24) if i<8 else None,note='DỮ LIỆU MẪU · không dùng cho vận hành'); db.add(case); db.flush()
+            db.add(StateHistory(case_id=case.id,from_status=None,to_status=status,action='tao_nhap',actor_id=inspector.id,actor_kind='he_thong',reason='DỮ LIỆU MẪU',meta={}))
+            level=next(l for l in levels_of(db,types[i%3].id) if l.level==level_of[types[i%3].code])
+            defect=CaseDefect(level_id=level.id,level_criteria_snapshot=level.criteria,case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,level=level_of[types[i%3].code],priority_snapshot=types[i%3].priority_flag); db.add(defect); db.flush()
             if i<4:
                 cost=CostEntry(case_id=case.id,category='repair',amount=__import__('decimal').Decimal('125000.00'),currency='VND',cost_status='actual',source_reference='DEMO-COST-'+str(i)); db.add(cost); db.flush()
                 db.add(CostAllocation(cost_entry_id=cost.id,case_defect_id=defect.id,allocated_amount=cost.amount))

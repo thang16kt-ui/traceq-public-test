@@ -197,3 +197,4 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
 .priority-toggle { border: 2px solid var(--line); border-radius: 10px; padding: 6px 12px; margin-bottom: 14px; }
 .priority-toggle.on { border-color: var(--priority); background: var(--priority-soft); }
 .readonly { min-height: var(--tap); display: flex; align-items: center; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; border: 1px dashed var(--line); }
+.code-block { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow: auto; font-size: .8rem; max-height: 60vh; white-space: pre-wrap; overflow-wrap: anywhere; }

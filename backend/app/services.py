@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 from fastapi import Request
 from sqlalchemy import select, text, update
-from .auth import MANAGERS, ApiError, case_access
+from .auth import MANAGERS, ApiError
 from .models import *
 
 def plain(value):
@@ -49,8 +49,8 @@ def get_case(db,user,case_id,lock=False):
     # identity map's pre-lock first_confirmed_at or row_version.
     if lock: stmt=stmt.with_for_update().execution_options(populate_existing=True)
     obj=db.scalar(stmt)
-    if not obj: raise ApiError(404,'NOT_FOUND','Không tìm thấy hồ sơ')
-    case_access(user,obj)
+    from .workflow import can_view
+    if not obj or not can_view(db,user,obj): raise ApiError(404,'NOT_FOUND','Không tìm thấy đề xuất trong phạm vi được phép')
     return obj
 
 def case_detail(db,obj):

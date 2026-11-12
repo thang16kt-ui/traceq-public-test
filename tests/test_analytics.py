@@ -22,7 +22,7 @@ def test_100_inspected_8_defective_12_occurrences_exact(admin, create_session, c
     assert result['numerator'] == result['defective_count'] == 8
     assert result['denominator'] == result['inspected_count'] == 100
     assert result['defect_rate'] == 8 and result['occurrence_count'] == 12
-    assert result['status_counts']['draft'] == 1
+    assert result['status_counts']['nhap'] == 1
     assert result['cost_coverage'] == 0 and result['cost_totals'] == []
     assert result['data_as_of'] and result['scope']['inspection_session_id'] == session['id']
     pareto = admin.get('/api/v1/analytics/pareto', params={'inspection_session_id':session['id']})
@@ -71,7 +71,7 @@ def test_two_defects_one_cost_counted_once_with_exact_allocations(admin, create_
     case = create_case(admin, create_session(admin)['id'], second_defect=True)
     assert confirm(admin, case['id']).status_code == 200
     detail = admin.get('/api/v1/defect-cases/'+case['id']).json()
-    defects = detail['defects']
+    defects = detail['items']
     body = {'category':'repair','amount':'100.25','currency':'VND','cost_status':'actual','source_reference':'TEST repair ticket 1',
         'allocations':[{'case_defect_id':defects[0]['id'],'allocated_amount':'60.10'}, {'case_defect_id':defects[1]['id'],'allocated_amount':'30.15'}]}
     response = admin.post('/api/v1/defect-cases/'+case['id']+'/costs',json=body,headers={'Idempotency-Key':str(uuid.uuid4())})
@@ -93,7 +93,7 @@ def test_overallocation_rejected_atomically_and_money_requires_decimal_string(ad
     assert confirm(admin, case['id']).status_code == 200
     detail = admin.get('/api/v1/defect-cases/'+case['id']).json()
     body = {'category':'repair','amount':'100.00','currency':'VND','cost_status':'actual','source_reference':'TEST ticket',
-        'allocations':[{'case_defect_id':detail['defects'][0]['id'],'allocated_amount':'100.01'}]}
+        'allocations':[{'case_defect_id':detail['items'][0]['id'],'allocated_amount':'100.01'}]}
     response = admin.post('/api/v1/defect-cases/'+case['id']+'/costs',json=body,headers={'Idempotency-Key':str(uuid.uuid4())})
     assert response.status_code == 422, response.text
     response = admin.post('/api/v1/defect-cases/'+case['id']+'/costs',json={**body,'amount':100.0,'allocations':[]},headers={'Idempotency-Key':str(uuid.uuid4())})
@@ -108,14 +108,14 @@ def test_cancelled_case_stays_auditable_but_leaves_valid_numerator(admin, create
     session = create_session(admin)
     case = create_case(admin, session['id'])
     assert confirm(admin, case['id']).status_code == 200
-    detail = admin.get('/api/v1/defect-cases/'+case['id']).json()
-    response = admin.patch('/api/v1/defect-cases/'+case['id'],json={'row_version':detail['row_version'],'status':'cancelled','reason':'Ghi nhận nhầm, giữ lịch sử đối soát'},headers={'Idempotency-Key':str(uuid.uuid4())})
+    from tests.conftest import step
+    response = step(admin, case['id'], 'huy_de_xuat', 'Ghi nhận nhầm, giữ lịch sử đối soát')
     assert response.status_code == 200, response.text
     result = summary(admin)
     assert result['numerator'] == 0 and result['denominator'] == 100 and result['occurrence_count'] == 0
     history = admin.get('/api/v1/defect-cases/'+case['id']).json()
     assert history['first_confirmed_at'] is not None
-    assert history['events'][-1]['reason'] == 'Ghi nhận nhầm, giữ lịch sử đối soát'
+    assert history['status'] == 'da_huy' and history['history'][-1]['reason'] == 'Ghi nhận nhầm, giữ lịch sử đối soát'
 
 
 def test_forecast_returns_reasons_instead_of_invented_prediction(admin):
@@ -132,7 +132,7 @@ def test_product_batch_and_period_scope_all_analysis_views(admin,seed,create_ses
         response=admin.post('/api/v1/'+path,json=body,headers={'Idempotency-Key':str(uuid.uuid4())})
         assert response.status_code==201,response.text
         return response.json()
-    product=create('product-types',{'sku':'FILTER-B','name':'Sản phẩm phân tích B'})
+    product=create('product-types',{'sku':'FILTER-B','name':'Sản phẩm phân tích B','supervisor_id':seed['users']['supervisor_test']})
     a2=create('batches',{'product_type_id':seed['product_type_id'],'lot_code':'A-OLDER'})
     b1=create('batches',{'product_type_id':product['id'],'lot_code':'B-NEW'})
     first=create_session(admin,10,started_at='2026-11-10T08:00:00Z')
@@ -142,7 +142,7 @@ def test_product_batch_and_period_scope_all_analysis_views(admin,seed,create_ses
     for _ in range(2): confirm(admin,create_case(admin,second['id'])['id'])
     third_case=create_case(admin,third['id'],occurrences=5);confirm(admin,third_case['id'])
     for case,amount in [(first_case,'10.00'),(third_case,'100.00')]:
-        create('defect-cases/'+case['id']+'/costs',{'category':'repair','amount':amount,'currency':'VND','cost_status':'actual','source_reference':'FILTER-COST','allocations':[{'case_defect_id':case['defects'][0]['id'],'allocated_amount':amount}]})
+        create('defect-cases/'+case['id']+'/costs',{'category':'repair','amount':amount,'currency':'VND','cost_status':'actual','source_reference':'FILTER-COST','allocations':[{'case_defect_id':case['items'][0]['id'],'allocated_amount':amount}]})
     for params,den,num,occ,actual in [
         ({'product_type_id':seed['product_type_id']},40,3,4,'10.00'),
         ({'product_type_id':seed['product_type_id'],'batch_id':seed['batch_id']},10,1,2,'10.00'),

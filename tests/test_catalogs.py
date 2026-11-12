@@ -61,7 +61,7 @@ def test_used_catalog_is_archived_and_restored_without_breaking_history(admin, s
     assert identity not in [x['id'] for x in admin.get('/api/v1/'+kind).json()['items']]
     assert identity in [x['id'] for x in admin.get('/api/v1/'+kind+'?state=inactive').json()['items']]
     detail = admin.get('/api/v1/defect-cases/'+case['id'])
-    assert detail.status_code==200 and detail.json()['defects'][0]['defect_type']['name']=='Lỗi bề mặt'
+    assert detail.status_code==200 and detail.json()['items'][0]['name']=='Lỗi bề mặt'
     after = admin.get('/api/v1/analytics/summary').json()
     assert after['defective_count']==before['defective_count']==1
     restored = change(admin,kind,archived.json()['item'],'restore')
@@ -208,7 +208,7 @@ def test_renaming_catalogs_keeps_versioned_export_import_consistent(admin,seed,c
         defect=db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type=='case_defects')).data
         assert defect['name']=='Lỗi bề mặt'  # snapshot lúc ghi nhận, không đổi theo danh mục
     detail=admin.get('/api/v1/defect-cases/'+case['id']).json()
-    assert detail['defects'][0]['id']==case['defects'][0]['id']
+    assert detail['items'][0]['id']==case['items'][0]['id']
 
 
 def test_product_supervisors_costs_and_validation(clients, seed):

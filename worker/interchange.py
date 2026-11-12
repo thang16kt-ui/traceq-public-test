@@ -203,14 +203,12 @@ def _validate_rows(tables, manifest):
             required = CORE_COLUMNS[table] - NULLABLE_COLUMNS[table]
             if any(row.get(key) is None for key in required):
                 raise PackageError(f"Required non-null field in {table}")
-            if table == "defect_cases" and row["status"] not in {"draft", "confirmed", "in_progress", "recheck", "closed", "cancelled"}:
+            if table == "defect_cases" and row["status"] not in {"nhap", "cho_minh_chung", "cho_xac_nhan", "cho_phuong_an", "cho_cap_tren", "dang_xu_ly", "cho_dong", "da_dong", "da_huy"}:
                 raise PackageError("Invalid defect case status")
-            if table == "defect_cases" and row["status"] in {"confirmed", "in_progress", "recheck", "closed"} and row.get("first_confirmed_at") is None:
+            if table == "defect_cases" and row["status"] in {"cho_phuong_an", "cho_cap_tren", "dang_xu_ly", "cho_dong", "da_dong"} and row.get("first_confirmed_at") is None:
                 raise PackageError("Confirmed case lacks first_confirmed_at")
-            if table == "defect_cases" and row["status"] == "draft" and row.get("first_confirmed_at") is not None:
+            if table == "defect_cases" and row["status"] == "nhap" and row.get("first_confirmed_at") is not None:
                 raise PackageError("Draft case cannot have first_confirmed_at")
-            if table == "defect_cases" and row["status"] == "closed" and not row.get("result"):
-                raise PackageError("Closed case must have a result")
             if table == "inspection_sessions" and row["status"] not in {"open", "closed"}:
                 raise PackageError("Invalid inspection session status")
             if table == "case_defects" and row["level"] not in {"nhe", "trung_binh", "nang"}:

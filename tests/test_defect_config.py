@@ -90,12 +90,12 @@ def test_market_price_history_and_effective_date(clients, seed):
 def test_item_keeps_level_and_criteria_snapshot(clients, create_session, create_case):
     manager = clients['manager_test']
     case = create_case(manager, create_session(manager)['id'])
-    type_id = case['defects'][0]['defect_type_id']
+    type_id = case['items'][0]['defect_type_id']
     data = config(manager, type_id)
     body = {'row_version': data['row_version'], 'priority_flag': True, 'cost_mode': 'auto',
             'levels': [{**level_body('trung_binh'), 'criteria': 'Tiêu chí mới'}]}
     assert manager.put(f'/api/v1/defect-types/{type_id}/config', json=body, headers=key()).status_code == 200
     with SessionLocal() as db:
-        item = db.get(CaseDefect, case['defects'][0]['id'])
+        item = db.get(CaseDefect, case['items'][0]['id'])
         assert item.level == 'trung_binh' and item.level_criteria_snapshot == 'Tiêu chí trung_binh'
         assert item.priority_snapshot is False  # cờ lúc ghi nhận

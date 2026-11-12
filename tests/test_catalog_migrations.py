@@ -20,6 +20,8 @@ def initial_schema(monkeypatch):
         try:
             tables=','.join('"'+name+'"' for name in Base.metadata.tables)
             connection.execute(text('DROP TABLE IF EXISTS '+tables+' CASCADE'))
+            for sequence in Base.metadata._sequences:
+                connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence}'))
             connection.exec_driver_sql((Path(__file__).parents[1]/'migrations/001_initial.sql').read_text())
             connection.execute(text("INSERT INTO schema_migrations VALUES ('001',CURRENT_TIMESTAMP)"))
             class MigrationEngine:
@@ -69,6 +71,8 @@ def test_fresh_database_runs_all_migrations(monkeypatch):
     with initial_schema(monkeypatch) as connection:
         tables=','.join('"'+name+'"' for name in Base.metadata.tables)
         connection.execute(text('DROP TABLE IF EXISTS '+tables+' CASCADE'))
+        for sequence in Base.metadata._sequences:
+            connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence}'))
         cli.migrate()
         versions={p.name[:3] for p in (Path(__file__).parents[1]/'migrations').glob('[0-9][0-9][0-9]_*.sql')}
         assert set(connection.execute(text('SELECT version FROM schema_migrations')).scalars())==versions

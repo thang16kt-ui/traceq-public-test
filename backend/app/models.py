@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func
+from sqlalchemy import Sequence, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
@@ -186,14 +186,59 @@ class DefectCase(Base, Versioned):
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
     unit_id = mapped_column(ForeignKey('units.id'), nullable=False, index=True)
     inspection_session_id = mapped_column(ForeignKey('inspection_sessions.id'), nullable=False, index=True)
-    status = mapped_column(String(30), default='draft', nullable=False)
+    code = mapped_column(String(20), unique=True, nullable=False)
+    status = mapped_column(String(30), default='nhap', nullable=False, index=True)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    priority = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    max_level = mapped_column(String(12), nullable=True)
+    supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    supervisor_name_snapshot = mapped_column(String(160), nullable=True)
+    submitted_at = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline_at = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    status_changed_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     detected_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     first_confirmed_at = mapped_column(DateTime(timezone=True), nullable=True)
     created_by = mapped_column(ForeignKey('users.id'), nullable=False)
     assigned_to = mapped_column(ForeignKey('users.id'), nullable=True)
     result = mapped_column(String(80), nullable=True)
     note = mapped_column(Text, default='', nullable=False)
-    __table_args__ = (UniqueConstraint('inspection_session_id','unit_id'), CheckConstraint("status in ('draft','confirmed','in_progress','recheck','closed','cancelled')"))
+    __table_args__ = (CheckConstraint("status IN ('nhap','cho_minh_chung','cho_xac_nhan','cho_phuong_an','cho_cap_tren','dang_xu_ly','cho_dong','da_dong','da_huy')", name='defect_cases_status_check'),
+                      Index('ix_defect_cases_one_open_per_unit', 'unit_id', unique=True, postgresql_where=text("status NOT IN ('da_dong','da_huy')")))
+
+proposal_code_seq = Sequence('proposal_code_seq', metadata=Base.metadata)
+
+class StateHistory(Base):
+    __tablename__ = 'state_history'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    from_status = mapped_column(String(20), nullable=True)
+    to_status = mapped_column(String(20), nullable=False)
+    action = mapped_column(String(40), nullable=False)
+    actor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    actor_kind = mapped_column(String(10), nullable=False)  # nguoi | tu_dong | he_thong
+    reason = mapped_column(Text, nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    meta = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='state_history_actor_kind_check'), Index('ix_state_history_case', 'case_id', 'at'))
+
+class Decision(Base):
+    __tablename__ = 'decisions'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    step = mapped_column(String(20), nullable=False)  # xac_nhan | phuong_an | cap_tren | dong | kiem_tra_mau
+    actor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    actor_kind = mapped_column(String(10), nullable=False)
+    action = mapped_column(String(40), nullable=False)
+    reason = mapped_column(Text, nullable=True)
+    confidence = mapped_column(Numeric(5, 4), nullable=True)
+    suggestion = mapped_column(JSON, nullable=True)
+    agreed = mapped_column(Boolean, nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    reversible_until = mapped_column(DateTime(timezone=True), nullable=True)
+    reversed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='decisions_actor_kind_check'),
+                      Index('ix_decisions_case', 'case_id', 'at'), Index('ix_decisions_step', 'step', 'at'))
 
 class CaseDefect(Base, Versioned):
     __tablename__ = 'case_defects'
@@ -206,6 +251,7 @@ class CaseDefect(Base, Versioned):
     level_criteria_snapshot = mapped_column(Text, default='', server_default='', nullable=False)
     priority_snapshot = mapped_column(Boolean, default=False, server_default='false', nullable=False)
     severity_original = mapped_column(String(20), nullable=True)
+    no_photo_reason = mapped_column(Text, nullable=True)
     suspected_cause = mapped_column(Text, nullable=True)
     verified_cause = mapped_column(Text, nullable=True)
     defect_type_name_snapshot = mapped_column(String(160), nullable=False)
@@ -251,6 +297,9 @@ class Attachment(Base, Versioned):
     content_type = mapped_column(String(100), nullable=False)
     size_bytes = mapped_column(Integer, nullable=False)
     uploaded_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    case_defect_id = mapped_column(ForeignKey('case_defects.id'), nullable=True)
+    kind = mapped_column(String(10), default='truoc', server_default='truoc', nullable=False)
+    __table_args__ = (CheckConstraint("kind IN ('truoc','sau')", name='attachments_kind_check'),)
 
 class ScanEvent(Base):
     __tablename__ = 'scan_events'
