@@ -92,5 +92,5 @@ def replace_defects(db,case,defects,user):
             d=current[type_id]
             for k,v in values.items(): setattr(d,k,v)
             bump(d)
-        else: db.add(CaseDefect(case_id=case.id,**values))
+        else: db.add(CaseDefect(case_id=case.id,defect_type_name_snapshot=t.name,defect_type_code_snapshot=t.code,**values))
     db.flush()

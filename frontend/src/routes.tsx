@@ -7,6 +7,8 @@ import { HOME } from './lib/nav';
 import { Empty, PageHeader } from './ui/components';
 import Me from './screens/Me';
 import Users from './screens/Users';
+import DefectTypes from './screens/DefectTypes';
+import { ProductsScreen, SetupHub } from './screens/Catalog';
 
 const MANAGERS = ['quan_ly', 'admin'];
 
@@ -23,6 +25,9 @@ type Entry = { roles?: string[]; render: (route: Route, session: Session) => Rea
 export const ROUTES: Record<string, Entry> = {
   'toi': { render: () => <Me /> },
   'nguoi-dung': { roles: MANAGERS, render: () => <Users /> },
+  'danh-muc': { roles: MANAGERS, render: () => <DefectTypes /> },
+  'san-pham': { roles: MANAGERS, render: (r) => <ProductsScreen tab={r.parts[1]} /> },
+  'thiet-lap': { roles: MANAGERS, render: () => <SetupHub /> },
 };
 
 const TITLES: Record<string, string> = {

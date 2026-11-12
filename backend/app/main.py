@@ -32,6 +32,8 @@ PREFIX='/api/v1'
 app.include_router(catalog_router)
 from .accounts import router as accounts_router
 app.include_router(accounts_router)
+from .settings_api import router as settings_router
+app.include_router(settings_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

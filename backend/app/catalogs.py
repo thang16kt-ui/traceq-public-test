@@ -55,6 +55,10 @@ def catalog_row(db, obj):
     result['usage'] = usage(db, obj)
     result['is_used'] = any(result['usage'].values())
     result['effective_active'] = obj.is_active
+    if isinstance(obj, ProductType):
+        for field in ('supervisor_id', 'backup_supervisor_id'):
+            person = db.get(User, getattr(obj, field)) if getattr(obj, field) else None
+            result[field.replace('_id', '')] = {'id': person.id, 'display_name': person.display_name, 'away_until': person.away_until.isoformat() if person.away_until else None} if person else None
     if isinstance(obj, Batch):
         parent = db.get(ProductType, obj.product_type_id)
         result['product_type'] = {key: value for key, value in row(parent).items() if key not in KEY_FIELDS['product_types']}
@@ -97,6 +101,12 @@ def check_values(db, model, values, obj=None):
             values[field] = display_text(values[field])
             if not values[field]:
                 raise ApiError(422, 'EMPTY_CATALOG_NAME', 'Tên và mã danh mục không được để trống')
+    if model is ProductType:
+        for field in ('supervisor_id', 'backup_supervisor_id'):
+            if values.get(field):
+                person = db.get(User, values[field])
+                if not person or not person.is_active or not person.has('giam_sat'):
+                    raise ApiError(422, 'INVALID_SUPERVISOR', 'Người được chọn phải có vai trò Giám sát và đang hoạt động', {field: 'Chọn người có vai trò Giám sát'})
     if model is Batch:
         parent = db.get(ProductType, values['product_type_id'])
         # Existing historical rows can still be corrected under an inactive parent.
@@ -116,11 +126,7 @@ def propagate_metadata_versions(db, obj, before):
     """The exchange mirror rejects changed labels at an unchanged parent version."""
     timestamp = now()
     if isinstance(obj, DefectType):
-        if all(before[field] == getattr(obj, field) for field in ('name','code')): return
-        case_ids = select(CaseDefect.case_id).where(CaseDefect.defect_type_id == obj.id)
-        # Lock/update parents before children, as normal case edits do.
-        db.execute(update(DefectCase).where(DefectCase.id.in_(case_ids)).values(row_version=DefectCase.row_version+1, updated_at=timestamp))
-        db.execute(update(CaseDefect).where(CaseDefect.defect_type_id == obj.id).values(row_version=CaseDefect.row_version+1, updated_at=timestamp))
+        # Mục lỗi giữ snapshot tên/mã lúc ghi nhận: đổi tên danh mục không đổi bản ghi cũ.
         return
     fields = ('name','sku') if isinstance(obj, ProductType) else ('lot_code','product_type_id')
     if all(before[field] == getattr(obj, field) for field in fields): return

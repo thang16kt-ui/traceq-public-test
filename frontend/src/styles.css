@@ -183,3 +183,11 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
   .shell { padding: 0 !important; }
   body, .content { background: #fff; padding: 0; }
 }
+
+/* ---------- Danh mục ---------- */
+.link-card { text-align: left; display: flex; flex-direction: column; gap: 4px; cursor: pointer; font: inherit; width: 100%; min-height: 72px; }
+.link-card:hover { border-color: var(--brand); }
+.folder .card-head h2::before { content: "📁 "; }
+.folder-levels { display: grid; gap: 12px; margin: 12px 0; }
+.level-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface-2); }
+.level-card.off { opacity: .7; }

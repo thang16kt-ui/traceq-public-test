@@ -29,6 +29,15 @@ class ProductIn(Input):
     sku: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=200)
     unit_of_measure: str = Field(default='cái',min_length=1,max_length=40)
+    supervisor_id: UUID | None = None
+    backup_supervisor_id: UUID | None = None
+    unit_cost: Decimal | None = Field(default=None,ge=0,max_digits=18,decimal_places=2)
+    salvage_value: Decimal | None = Field(default=None,ge=0,max_digits=18,decimal_places=2)
+    @model_validator(mode='after')
+    def supervisors_differ(self):
+        if self.supervisor_id and self.supervisor_id==self.backup_supervisor_id: raise ValueError('Giám sát thay thế phải khác giám sát chính')
+        if self.unit_cost is not None and self.salvage_value is not None and self.salvage_value>self.unit_cost: raise ValueError('Giá trị thu hồi không được lớn hơn giá vốn')
+        return self
 
 class BatchIn(Input):
     product_type_id: UUID

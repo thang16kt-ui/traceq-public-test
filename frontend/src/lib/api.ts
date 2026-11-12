@@ -81,6 +81,7 @@ export async function api(path: string, options: ApiOptions = {}): Promise<any> 
 export const get = (path: string, signal?: AbortSignal) => api(path, { signal });
 export const post = (path: string, body?: any, key?: string) => api(path, { method: 'POST', body, key });
 export const patch = (path: string, body?: any, key?: string) => api(path, { method: 'PATCH', body, key });
+export const put = (path: string, body?: any, key?: string) => api(path, { method: 'PUT', body, key });
 export const del = (path: string, body?: any, key?: string) => api(path, { method: 'DELETE', body, key });
 
 export function errorText(error: unknown): string {

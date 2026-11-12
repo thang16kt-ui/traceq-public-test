@@ -79,6 +79,12 @@ class ProductType(Base, Versioned):
     name_key = mapped_column(Text, unique=True, nullable=False)
     sku_key = mapped_column(Text, unique=True, nullable=False)
     has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    backup_supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    unit_cost = mapped_column(Numeric(18, 2), nullable=True)
+    salvage_value = mapped_column(Numeric(18, 2), nullable=True)
+    __table_args__ = (CheckConstraint('(unit_cost IS NULL OR unit_cost >= 0) AND (salvage_value IS NULL OR salvage_value >= 0)', name='product_types_costs_nonnegative'),)
 
 class Batch(Base, Versioned):
     __tablename__ = 'batches'
@@ -124,6 +130,7 @@ class DefectType(Base, Versioned):
     name_key = mapped_column(Text, unique=True, nullable=False)
     code_key = mapped_column(Text, unique=True, nullable=False)
     has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
 
 
 def set_catalog_keys(mapper, connection, target):
@@ -159,6 +166,9 @@ class CaseDefect(Base, Versioned):
     severity = mapped_column(String(20), nullable=False)
     suspected_cause = mapped_column(Text, nullable=True)
     verified_cause = mapped_column(Text, nullable=True)
+    defect_type_name_snapshot = mapped_column(String(160), nullable=False)
+    defect_type_code_snapshot = mapped_column(String(80), nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
     __table_args__ = (CheckConstraint('occurrence_count > 0'), CheckConstraint("severity in ('low','medium','high','critical')"), UniqueConstraint('case_id','defect_type_id'))
 
 class CaseEvent(Base):
@@ -295,6 +305,13 @@ class AnalysisRecord(Base):
     row_version = mapped_column(Integer, nullable=False)
     data = mapped_column(JSON, nullable=False)
     scope_key = mapped_column(String(300), nullable=False)
+
+class AppSetting(Base):
+    __tablename__ = 'app_settings'
+    key = mapped_column(String(80), primary_key=True)
+    value = mapped_column(JSON, nullable=False)
+    updated_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    updated_by = mapped_column(ForeignKey('users.id'), nullable=True)
 
 class SchemaMigration(Base):
     __tablename__ = 'schema_migrations'

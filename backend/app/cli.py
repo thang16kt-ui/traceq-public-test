@@ -96,7 +96,7 @@ def seed_demo(password_env):
         for i in range(10):
             unit=Unit(batch_id=b.id,serial_number=f'DEMO-{i+1:04}',qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
             case=DefectCase(unit_id=unit.id,inspection_session_id=s.id,created_by=inspector.id,assigned_to=inspector.id,status='confirmed' if i<8 else 'draft',detected_at=started+timedelta(minutes=i+1),first_confirmed_at=started+timedelta(minutes=i+2) if i<8 else None,note='DỮ LIỆU MẪU · không dùng cho vận hành'); db.add(case); db.flush()
-            defect=CaseDefect(case_id=case.id,defect_type_id=types[i%3].id,occurrence_count=2 if i<4 else 1,severity=types[i%3].severity_default); db.add(defect); db.flush()
+            defect=CaseDefect(case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,severity=types[i%3].severity_default); db.add(defect); db.flush()
             db.add(CaseEvent(case_id=case.id,event_type='confirmed' if i<8 else 'created',actor_id=inspector.id,reason='DỮ LIỆU MẪU'))
             if i<4:
                 cost=CostEntry(case_id=case.id,category='repair',amount=__import__('decimal').Decimal('125000.00'),currency='VND',cost_status='actual',source_reference='DEMO-COST-'+str(i)); db.add(cost); db.flush()

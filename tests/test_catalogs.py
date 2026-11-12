@@ -206,6 +206,39 @@ def test_renaming_catalogs_keeps_versioned_export_import_consistent(admin,seed,c
         data=db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type=='defect_cases')).data
         assert data['product_name']=='Sản phẩm sửa tên' and data['lot_code']=='LO-SUA-TEN'
         defect=db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type=='case_defects')).data
-        assert defect['name']=='Lỗi sửa tên'
+        assert defect['name']=='Lỗi bề mặt'  # snapshot lúc ghi nhận, không đổi theo danh mục
     detail=admin.get('/api/v1/defect-cases/'+case['id']).json()
     assert detail['defects'][0]['id']==case['defects'][0]['id']
+
+
+def test_product_supervisors_costs_and_validation(clients, seed):
+    from backend.app.models import User as U
+    manager = clients['manager_test']
+    with SessionLocal() as db:
+        ids = {u.username: u.id for u in db.scalars(select(U))}
+    item = find(manager, 'product-types', seed['product_type_id'])
+    body = {'sku': item['sku'], 'name': item['name'], 'unit_of_measure': 'cái', 'supervisor_id': ids['supervisor_test'],
+            'backup_supervisor_id': ids['supervisor2_test'], 'unit_cost': '1500000', 'salvage_value': '200000'}
+    saved = change(manager, 'product-types', item, 'edit', **body)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['item']['supervisor']['display_name'] == 'supervisor_test'
+    item = saved.json()['item']
+    not_supervisor = change(manager, 'product-types', item, 'edit', **{**body, 'supervisor_id': ids['inspector_test']})
+    assert not_supervisor.json()['code'] == 'INVALID_SUPERVISOR'
+    assert change(manager, 'product-types', item, 'edit', **{**body, 'salvage_value': '9999999'}).status_code == 422
+
+
+def test_settings_validate_and_audit(clients):
+    manager, creator = clients['manager_test'], clients['inspector_test']
+    key = {'Idempotency-Key': str(uuid.uuid4())}
+    assert creator.put('/api/v1/settings/approval_threshold', json={'value': '1'}, headers=key).status_code == 403
+    bad = manager.put('/api/v1/settings/shifts', json={'value': ['Ca 1', 'ca 1']}, headers={'Idempotency-Key': str(uuid.uuid4())})
+    assert bad.status_code == 422
+    ok = manager.put('/api/v1/settings/approval_threshold', json={'value': '3000000', 'reason': 'Theo quyết định QA'}, headers={'Idempotency-Key': str(uuid.uuid4())})
+    assert ok.status_code == 200, ok.text
+    values = {i['key']: i['value'] for i in creator.get('/api/v1/settings').json()['items']}
+    assert values['approval_threshold'] == '3000000' and values['cost_min_samples'] == 5
+    from backend.app.models import AuditLog
+    with SessionLocal() as db:
+        log = db.scalar(select(AuditLog).where(AuditLog.action == 'update_setting'))
+        assert log.changed_fields == {'before': '2000000', 'after': '3000000'}

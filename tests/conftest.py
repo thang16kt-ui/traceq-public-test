@@ -30,6 +30,10 @@ TEST_PASSWORD = 'Test-passphrase-3zJ8A!'
 @pytest.fixture(scope='session', autouse=True)
 def database_schema():
     assert engine.dialect.name == 'postgresql'
+    # Database _test dùng một lần: dựng lại schema theo models mỗi phiên test.
+    with engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA public CASCADE'))
+        conn.execute(text('CREATE SCHEMA public'))
     Base.metadata.create_all(engine)
     yield
 
