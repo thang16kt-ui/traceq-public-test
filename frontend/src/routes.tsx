@@ -15,6 +15,7 @@ import Evidence from './screens/Evidence';
 import Detail from './screens/Detail';
 import Scan from './screens/Scan';
 import './screens/Review';
+import './screens/TreatmentStep';
 import DefectTypes from './screens/DefectTypes';
 import { ProductsScreen, SetupHub } from './screens/Catalog';
 
@@ -39,6 +40,8 @@ export const ROUTES: Record<string, Entry> = {
   'nhat-ky': { roles: MANAGERS, render: () => <AuditLog /> },
   'viec-cua-toi': { roles: ['nguoi_tao', 'quan_ly'], render: () => <ProposalList title="Việc của tôi" subtitle="Đề xuất do bạn tạo" view="mine" canCreate extraFilters={[{ value: 'nhap', label: 'Nháp' }]} /> },
   'can-duyet': { roles: ['giam_sat', 'quan_ly'], render: () => <ProposalList title="Cần duyệt" subtitle="Đề xuất của sản phẩm bạn giám sát" view="review" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /> },
+  'cho-phe-duyet': { roles: ['cap_tren'], render: () => <ProposalList title="Chờ phê duyệt" subtitle="Đề xuất cần cấp trên duyệt (chi phí vượt ngưỡng, Hủy, hoặc lỗi ưu tiên)" view="approve" /> },
+  'lich-su': { roles: ['cap_tren'], render: () => <ProposalList title="Lịch sử" subtitle="Đề xuất đã qua bước cấp trên" view="approved" extraFilters={[{ value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'da_dong', label: 'Đã đóng' }]} /> },
   'tao': { roles: ['nguoi_tao', 'quan_ly'], render: (r) => <Create key={r.parts[1] || 'new'} editId={r.parts[1]} token={r.params.get('qr') || r.params.get('serial') || undefined} /> },
   'quet': { render: (r) => <Scan key={r.parts[1] || ''} token={r.parts[1]} /> },
   'de-xuat': { render: (r, session) => {

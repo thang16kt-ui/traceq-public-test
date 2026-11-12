@@ -230,7 +230,7 @@ def create_proposal(data: ProposalIn, request: Request, user: User = Depends(cur
 
 @router.get('/defect-cases')
 def list_proposals(filter: Literal['tat_ca', 'cho_minh_chung', 'cho_xac_nhan', 'qua_han', 'uu_tien', 'dang_mo', 'cho_cap_tren', 'cho_phuong_an', 'cho_dong', 'dang_xu_ly', 'da_dong', 'nhap'] = 'tat_ca',
-                   view: Literal['mine', 'review', 'approve', 'all'] = 'all', search: str = Query('', max_length=100),
+                   view: Literal['mine', 'review', 'approve', 'approved', 'all'] = 'all', search: str = Query('', max_length=100),
                    page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
                    user: User = Depends(current_user), db: Session = Depends(get_db)):
     conditions = scope_conditions(db, user)
@@ -241,6 +241,10 @@ def list_proposals(filter: Literal['tat_ca', 'cho_minh_chung', 'cho_xac_nhan', '
         conditions.append(DefectCase.created_by != user.id)
     elif view == 'approve':
         conditions.append(DefectCase.status == 'cho_cap_tren')
+        conditions.append(DefectCase.created_by != user.id)
+    elif view == 'approved':  # lịch sử của cấp trên: đề xuất đã từng qua bước cấp trên
+        from .models import Decision
+        conditions.append(DefectCase.id.in_(select(Decision.case_id).where(Decision.step == 'cap_tren')))
     overdue = and_(DefectCase.deadline_at < now(), DefectCase.status.in_([s for s in OPEN_STATUSES if s != 'nhap']))
     if filter == 'qua_han':
         conditions.append(overdue)

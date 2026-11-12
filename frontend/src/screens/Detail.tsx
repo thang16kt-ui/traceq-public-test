@@ -3,8 +3,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { download, get, post } from '../lib/api';
 import type { Row } from '../lib/api';
-import { formatMoney, formatTime, relativeDeadline } from '../lib/format';
-import { LEVEL_LABELS, METHOD_LABELS, STATUS_LABELS } from '../lib/labels';
+import { formatTime, relativeDeadline } from '../lib/format';
+import { LEVEL_LABELS, STATUS_LABELS } from '../lib/labels';
 import { navigate } from '../lib/router';
 import { useSession } from '../lib/session';
 import { Alert, Badge, Button, Card, ConfirmDialog, ErrorBox, Loading, PageHeader, StatusBadge, useLoad, useToast } from '../ui/components';
@@ -79,9 +79,7 @@ export default function Detail({ id }: { id: string }) {
         </div>
       </section>)}
     </Card>
-    {p.treatment && <Card title="Phương án và chi phí"><dl className="kv">
-      <dt>Phương án</dt><dd>{METHOD_LABELS[p.treatment.method]}</dd><dt>Chi phí ước tính</dt><dd>{formatMoney(p.treatment.est_cost)}</dd>
-      {p.cost_actual && <><dt>Chi phí thực tế</dt><dd>{formatMoney(p.cost_actual.total)}</dd></>}</dl></Card>}
+
     {confirm && <ConfirmDialog title={ACTION_LABELS[confirm]} danger requireReason confirmLabel={ACTION_LABELS[confirm]}
       message={confirm === 'tu_choi' ? 'Đề xuất sẽ quay lại bước chụp minh chứng.' : confirm === 'cap_tren_tu_choi' ? 'Đề xuất quay lại giám sát để chọn lại phương án.' : confirm === 'yeu_cau_lam_lai' ? 'Đề xuất quay lại bước Đang xử lý.' : `Đề xuất sẽ chuyển sang "${STATUS_LABELS.da_huy}". Lịch sử được giữ nguyên.`}
       onClose={() => setConfirm(null)} onConfirm={(reason) => act(confirm, reason)} />}

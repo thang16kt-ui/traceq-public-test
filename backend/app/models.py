@@ -222,6 +222,29 @@ class StateHistory(Base):
     meta = mapped_column(JSON, default=dict, nullable=False)
     __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='state_history_actor_kind_check'), Index('ix_state_history_case', 'case_id', 'at'))
 
+class Treatment(Base):
+    __tablename__ = 'treatments'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    method = mapped_column(String(10), nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
+    est_cost = mapped_column(Numeric(18, 2), nullable=True)
+    est_source = mapped_column(String(30), nullable=False)
+    est_sample_n = mapped_column(Integer, nullable=False)
+    est_breakdown = mapped_column(JSON, nullable=False)
+    deadline_at = mapped_column(DateTime(timezone=True), nullable=True)
+    needs_approval = mapped_column(Boolean, nullable=False)
+    approval_reasons = mapped_column(JSON, nullable=False)
+    status = mapped_column(String(12), nullable=False)  # cho_duyet | hieu_luc | bi_tu_choi | thay_the
+    decided_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    decided_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    approved_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    approved_at = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_reason = mapped_column(Text, nullable=True)
+    __table_args__ = (CheckConstraint("method IN ('sua','tai_che','huy','khac')", name='treatments_method_check'),
+                      CheckConstraint("status IN ('cho_duyet','hieu_luc','bi_tu_choi','thay_the')", name='treatments_status_check'),
+                      Index('ix_treatments_case', 'case_id', 'decided_at'))
+
 class Decision(Base):
     __tablename__ = 'decisions'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)

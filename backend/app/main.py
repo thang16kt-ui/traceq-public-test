@@ -42,6 +42,8 @@ from .evidence import router as evidence_router
 app.include_router(evidence_router)
 from .review import router as review_router
 app.include_router(review_router)
+from .treatment import router as treatment_router
+app.include_router(treatment_router)
 
 @app.middleware('http')
 async def requests(request,call_next):

@@ -262,3 +262,8 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
 .check-list li { line-height: 1.5; }
 .precheck { border-left: 5px solid var(--info); }
 .suggestion { background: var(--info-soft); border-radius: 8px; padding: 8px 12px; }
+.step-card { border-left: 5px solid var(--brand); }
+.estimate { background: var(--surface-2); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.estimate-main { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.estimate-main strong { font-size: 1.4rem; }
+.breakdown { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; }
