@@ -106,7 +106,7 @@ def test_inactive_parents_block_new_records_and_require_parent_restore(admin, se
     assert not admin.get('/api/v1/batches').json()['items']
     assert send(admin,'POST','/batches',{'product_type_id':product['id'],'lot_code':'NEW'}).status_code==409
     assert send(admin,'POST','/inspection-sessions',{'batch_id':seed['batch_id'],'line':'L','shift':'C','stage':'S','population_key':'P'}).status_code==409
-    payload={'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0]}]}
+    payload={'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0],'level':'nhe'}]}
     assert send(admin,'POST','/defect-cases',payload).status_code==409
     batch=find(admin,'batches',seed['batch_id'])
     retired=change(admin,'batches',batch).json()['item']
@@ -120,9 +120,9 @@ def test_retired_defect_can_be_kept_on_existing_case_but_not_added(admin,seed,cr
     session=create_session(admin);case=create_case(admin,session['id'])
     assert change(admin,'defect-types',find(admin,'defect-types',seed['defect_type_ids'][0])).status_code==200
     current=admin.get('/api/v1/defect-cases/'+case['id']).json()
-    patched=send(admin,'PATCH','/defect-cases/'+case['id'],{'row_version':current['row_version'],'reason':'Cập nhật ghi chú cũ','defects':[{'defect_type_id':seed['defect_type_ids'][0],'occurrence_count':2}]})
+    patched=send(admin,'PATCH','/defect-cases/'+case['id'],{'row_version':current['row_version'],'reason':'Cập nhật ghi chú cũ','defects':[{'defect_type_id':seed['defect_type_ids'][0],'occurrence_count':2,'level':'trung_binh'}]})
     assert patched.status_code==200,patched.text
-    invalid=send(admin,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0]}]})
+    invalid=send(admin,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0],'level':'nhe'}]})
     assert invalid.status_code==422
 
 
@@ -130,7 +130,7 @@ def test_previously_used_defect_stays_preserved_after_removal_from_case(admin,se
     session=create_session(admin);case=create_case(admin,session['id'],second_defect=True)
     response=send(admin,'PATCH','/defect-cases/'+case['id'],{
         'row_version':case['row_version'],'reason':'Bỏ lỗi sau khi đối soát',
-        'defects':[{'defect_type_id':seed['defect_type_ids'][1]}]})
+        'defects':[{'defect_type_id':seed['defect_type_ids'][1],'level':'trung_binh'}]})
     assert response.status_code==200,response.text
     item=find(admin,'defect-types',seed['defect_type_ids'][0])
     assert item['is_used'] and item['usage']['case_defects']==0
@@ -148,7 +148,7 @@ def test_concurrent_normalized_names_only_create_once(clients):
 @pytest.mark.parametrize('kind,payload', [
     ('product-types',{'sku':'SECOND','name':'Sản phẩm khác','unit_of_measure':'cái'}),
     ('batches',{'lot_code':'SECOND'}),
-    ('defect-types',{'code':'SECOND','name':'Lỗi khác','severity_default':'medium'}),
+    ('defect-types',{'code':'SECOND','name':'Lỗi khác'}),
 ])
 def test_edit_cannot_duplicate_existing_name_and_unprivileged_delete_is_blocked(admin,inspector,seed,kind,payload):
     if kind=='batches': payload={**payload,'product_type_id':seed['product_type_id']}
@@ -165,7 +165,7 @@ def test_delete_racing_new_usage_never_breaks_references(admin,inspector,seed,cr
     session=create_session(inspector)
     item=send(admin,'POST','/defect-types',{'code':'RACE','name':'Lỗi đồng thời'}).json()
     def create():
-        return send(inspector,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'RACE-UNIT','defects':[{'defect_type_id':item['id']}]})
+        return send(inspector,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'RACE-UNIT','defects':[{'defect_type_id':item['id'],'level':'trung_binh'}]})
     with ThreadPoolExecutor(max_workers=2) as pool:
         a=pool.submit(create);b=pool.submit(change,admin,'defect-types',item)
         created,deleted=a.result(),b.result()
@@ -196,7 +196,7 @@ def test_renaming_catalogs_keeps_versioned_export_import_consistent(admin,seed,c
     for kind,identity,values in [
         ('product-types',seed['product_type_id'],{'sku':'RENAMED','name':'Sản phẩm sửa tên','unit_of_measure':'cái'}),
         ('batches',seed['batch_id'],{'product_type_id':seed['product_type_id'],'lot_code':'LO-SUA-TEN'}),
-        ('defect-types',seed['defect_type_ids'][0],{'code':'D-RENAMED','name':'Lỗi sửa tên','severity_default':'high'}),
+        ('defect-types',seed['defect_type_ids'][0],{'code':'D-RENAMED','name':'Lỗi sửa tên'}),
     ]:
         item=find(admin,kind,identity)
         response=change(admin,kind,item,'edit',**values)

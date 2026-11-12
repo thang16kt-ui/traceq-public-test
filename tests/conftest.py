@@ -65,9 +65,14 @@ def seed():
         db.add(product)
         db.flush()
         batch = Batch(product_type_id=product.id, lot_code='TEST-LOT-01')
-        defects = [DefectType(code='TEST-D1', name='Lỗi bề mặt', severity_default='medium'),
-                   DefectType(code='TEST-D2', name='Lỗi kích thước', severity_default='high')]
+        defects = [DefectType(code='TEST-D1', name='Lỗi bề mặt'),
+                   DefectType(code='TEST-D2', name='Lỗi kích thước')]
         db.add_all([batch, *defects]); db.flush()
+        from backend.app.defect_config import ensure_levels, levels_of
+        for d in defects:
+            ensure_levels(db, d.id, enabled=True)
+            for level in levels_of(db, d.id):
+                level.criteria = 'Tiêu chí ' + level.level
         result = {'users': users, 'product_type_id': product.id,
                   'batch_id': batch.id, 'defect_type_ids': [d.id for d in defects]}
         db.commit()
@@ -111,9 +116,9 @@ def create_session(seed):
 @pytest.fixture
 def create_case(seed):
     def create(client, session_id, serial=None, occurrences=1, second_defect=False):
-        defects = [{'defect_type_id': seed['defect_type_ids'][0], 'occurrence_count': occurrences, 'severity': 'medium'}]
+        defects = [{'defect_type_id': seed['defect_type_ids'][0], 'occurrence_count': occurrences, 'level': 'trung_binh'}]
         if second_defect:
-            defects.append({'defect_type_id': seed['defect_type_ids'][1], 'occurrence_count': 1, 'severity': 'high'})
+            defects.append({'defect_type_id': seed['defect_type_ids'][1], 'occurrence_count': 1, 'level': 'nang'})
         payload = {'inspection_session_id': session_id, 'serial_number': serial or 'TEST-' + str(uuid.uuid4()), 'defects': defects}
         response = client.post('/api/v1/defect-cases', json=payload, headers={'Idempotency-Key': str(uuid.uuid4())})
         assert response.status_code in (200, 201), response.text

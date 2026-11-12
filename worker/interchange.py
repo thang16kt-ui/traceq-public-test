@@ -23,7 +23,7 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_COLUMNS = {
     "inspection_sessions": ["id", "batch_id", "line", "shift", "stage", "inspected_count", "sample_method", "population_key", "product_type_id", "sku", "product_name", "lot_code", "started_at", "ended_at", "status", "created_at", "updated_at", "row_version"],
     "defect_cases": ["id", "unit_id", "inspection_session_id", "status", "detected_at", "first_confirmed_at", "created_by", "assigned_to", "result", "serial_number", "product_type_id", "sku", "product_name", "lot_code", "created_at", "updated_at", "row_version"],
-    "case_defects": ["id", "case_id", "defect_type_id", "code", "name", "occurrence_count", "severity", "suspected_cause", "verified_cause", "created_at", "updated_at", "row_version"],
+    "case_defects": ["id", "case_id", "defect_type_id", "code", "name", "occurrence_count", "level", "suspected_cause", "verified_cause", "created_at", "updated_at", "row_version"],
     "cost_entries": ["id", "case_id", "category", "amount", "currency", "cost_status", "source_reference", "created_at", "updated_at", "row_version"],
     "cost_allocations": ["id", "cost_entry_id", "case_defect_id", "allocated_amount", "created_at", "updated_at", "row_version"],
 }
@@ -213,7 +213,7 @@ def _validate_rows(tables, manifest):
                 raise PackageError("Closed case must have a result")
             if table == "inspection_sessions" and row["status"] not in {"open", "closed"}:
                 raise PackageError("Invalid inspection session status")
-            if table == "case_defects" and row["severity"] not in {"low", "medium", "high", "critical"}:
+            if table == "case_defects" and row["level"] not in {"nhe", "trung_binh", "nang"}:
                 raise PackageError("Invalid defect severity")
             if table == "cost_entries":
                 if row["cost_status"] not in {"actual", "estimated"}:

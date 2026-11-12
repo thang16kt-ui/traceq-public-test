@@ -191,3 +191,9 @@ fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; }
 .folder-levels { display: grid; gap: 12px; margin: 12px 0; }
 .level-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface-2); }
 .level-card.off { opacity: .7; }
+.level-summary { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.level-summary li { padding: 6px 10px; background: var(--surface-2); border-radius: 6px; }
+.level-summary li.off { color: var(--muted); }
+.priority-toggle { border: 2px solid var(--line); border-radius: 10px; padding: 6px 12px; margin-bottom: 14px; }
+.priority-toggle.on { border-color: var(--priority); background: var(--priority-soft); }
+.readonly { min-height: var(--tap); display: flex; align-items: center; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; border: 1px dashed var(--line); }

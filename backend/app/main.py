@@ -34,6 +34,8 @@ from .accounts import router as accounts_router
 app.include_router(accounts_router)
 from .settings_api import router as settings_router
 app.include_router(settings_router)
+from .defect_config import router as defect_config_router
+app.include_router(defect_config_router)
 
 @app.middleware('http')
 async def requests(request,call_next):
@@ -416,7 +418,7 @@ def documented_openapi():
                     operation['responses'][code]={'description':description,'content':{'application/json':{'schema':{'$ref':'#/components/schemas/ApiError'},'example':{'code':'VERSION_CONFLICT' if code=='409' else 'REQUEST_REJECTED','message':description,'field_errors':{},'request_id':'7b3e7f3c-28bb-4d7d-89b5-190a1f633a28'}}}}
     schema['paths'][PREFIX+'/defect-cases/{case_id}/confirm']['post']['responses']['200']={'description':'Kết quả được lưu cùng giao dịch xác nhận; phát lại trả nguyên kết quả cũ','content':{'application/json':{'schema':{'type':'object','required':['case_id','first_confirmed_at','outcome','request_id'],'properties':{'case_id':{'type':'string','format':'uuid'},'first_confirmed_at':{'type':'string','format':'date-time'},'outcome':{'enum':['confirmed_now','already_confirmed']},'request_id':{'type':'string'}}},'example':{'case_id':'458c1550-492a-4f19-9ff1-f5d32a8bb91d','first_confirmed_at':'2026-11-10T01:30:00Z','outcome':'confirmed_now','request_id':'7b3e7f3c-28bb-4d7d-89b5-190a1f633a28'}}}}
     schema['paths'][PREFIX+'/export-runs']['post']['responses']['202']={'description':'Công việc bền vững đã được ghi vào PostgreSQL; chưa có nghĩa xuất thành công','content':{'application/json':{'schema':{'type':'object','properties':{'run_id':{'type':'string','format':'uuid'},'status':{'type':'string'},'run':{'type':'object'}}},'example':{'run_id':'458c1550-492a-4f19-9ff1-f5d32a8bb91d','status':'queued'}}}}
-    schema['paths'][PREFIX+'/defect-cases']['post']['requestBody']['content']['application/json']['example']={'inspection_session_id':'a11d735f-910a-4826-9d1f-e432a60a2fa6','serial_number':'SN-001','defects':[{'defect_type_id':'7de7ba2a-35a5-4ca4-8e93-34e7b86ba46a','occurrence_count':2,'severity':'high'}]}
+    schema['paths'][PREFIX+'/defect-cases']['post']['requestBody']['content']['application/json']['example']={'inspection_session_id':'a11d735f-910a-4826-9d1f-e432a60a2fa6','serial_number':'SN-001','defects':[{'defect_type_id':'7de7ba2a-35a5-4ca4-8e93-34e7b86ba46a','occurrence_count':2,'level':'nang'}]}
     schema['paths'][PREFIX+'/defect-cases/{case_id}/confirm']['post']['requestBody']['content']['application/json']['example']={'client_event_id':'fb5309a7-4d39-4575-a326-214d599a141c','observed_at':'2026-11-10T08:30:00+07:00','device_id':'inspection-phone-01'}
     schema['paths'][PREFIX+'/export-runs']['post']['requestBody']['content']['application/json']['example']={'period_start':'2026-11-09T00:00:00+07:00','period_end':'2026-11-10T00:00:00+07:00','scope':{},'format':'csv','revision':1}
     return schema

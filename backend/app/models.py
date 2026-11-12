@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
@@ -125,12 +125,50 @@ class DefectType(Base, Versioned):
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
     code = mapped_column(String(80), unique=True, nullable=False)
     name = mapped_column(String(160), nullable=False)
-    severity_default = mapped_column(String(20), default='medium', nullable=False)
     is_active = mapped_column(Boolean, default=True, nullable=False)
     name_key = mapped_column(Text, unique=True, nullable=False)
     code_key = mapped_column(Text, unique=True, nullable=False)
     has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
     site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    # Cờ "Lỗi đặc biệt: luôn cảnh báo ưu tiên" đặt MỘT LẦN ở loại lỗi, áp cho mọi mức bên trong.
+    priority_flag = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    cost_mode = mapped_column(String(10), default='auto', server_default='auto', nullable=False)
+    __table_args__ = (CheckConstraint("cost_mode IN ('auto','market','actual')", name='defect_types_cost_mode_check'),)
+
+LEVELS = ('nhe', 'trung_binh', 'nang')
+LEVEL_LABELS = {'nhe': 'Nhẹ', 'trung_binh': 'Trung bình', 'nang': 'Nặng'}
+METHODS = ('sua', 'tai_che', 'huy', 'khac')
+METHOD_LABELS = {'sua': 'Sửa', 'tai_che': 'Tái chế', 'huy': 'Hủy', 'khac': 'Khác'}
+
+class DefectLevel(Base, Versioned):
+    __tablename__ = 'defect_levels'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=False)
+    level = mapped_column(String(12), nullable=False)
+    enabled = mapped_column(Boolean, nullable=False, default=False)
+    criteria = mapped_column(Text, nullable=False, default='')
+    market_price = mapped_column(Numeric(18, 2), nullable=True)
+    price_effective_from = mapped_column(Date, nullable=True)
+    deadline_hours = mapped_column(Integer, nullable=True)
+    suggested_actions = mapped_column(ARRAY(String(10)), nullable=False, default=list)
+    __table_args__ = (
+        UniqueConstraint('defect_type_id', 'level', name='defect_levels_type_level_key'),
+        CheckConstraint("level IN ('nhe','trung_binh','nang')", name='defect_levels_level_check'),
+        CheckConstraint('deadline_hours IS NULL OR deadline_hours > 0', name='defect_levels_deadline_check'),
+        CheckConstraint('market_price IS NULL OR market_price >= 0', name='defect_levels_price_check'),
+        CheckConstraint("suggested_actions <@ ARRAY['sua','tai_che','huy','khac']::varchar(10)[]", name='defect_levels_actions_check'),
+    )
+
+class MarketPriceHistory(Base):
+    __tablename__ = 'market_price_history'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    level_id = mapped_column(ForeignKey('defect_levels.id'), nullable=False)
+    price = mapped_column(Numeric(18, 2), nullable=False)
+    effective_from = mapped_column(Date, nullable=False)
+    changed_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    changed_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    reason = mapped_column(Text, nullable=True)
+    __table_args__ = (CheckConstraint('price >= 0', name='market_price_history_price_check'), Index('ix_market_price_history_level', 'level_id', 'effective_from'))
 
 
 def set_catalog_keys(mapper, connection, target):
@@ -163,13 +201,17 @@ class CaseDefect(Base, Versioned):
     case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False, index=True)
     defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=False)
     occurrence_count = mapped_column(Integer, default=1, nullable=False)
-    severity = mapped_column(String(20), nullable=False)
+    level = mapped_column(String(12), nullable=False)
+    level_id = mapped_column(ForeignKey('defect_levels.id'), nullable=True)
+    level_criteria_snapshot = mapped_column(Text, default='', server_default='', nullable=False)
+    priority_snapshot = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    severity_original = mapped_column(String(20), nullable=True)
     suspected_cause = mapped_column(Text, nullable=True)
     verified_cause = mapped_column(Text, nullable=True)
     defect_type_name_snapshot = mapped_column(String(160), nullable=False)
     defect_type_code_snapshot = mapped_column(String(80), nullable=False)
     note = mapped_column(Text, default='', server_default='', nullable=False)
-    __table_args__ = (CheckConstraint('occurrence_count > 0'), CheckConstraint("severity in ('low','medium','high','critical')"), UniqueConstraint('case_id','defect_type_id'))
+    __table_args__ = (CheckConstraint('occurrence_count > 0'), CheckConstraint("level IN ('nhe','trung_binh','nang')", name='case_defects_level_check'), UniqueConstraint('case_id','defect_type_id'))
 
 class CaseEvent(Base):
     __tablename__ = 'case_events'

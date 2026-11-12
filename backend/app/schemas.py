@@ -46,8 +46,6 @@ class BatchIn(Input):
 class DefectTypeIn(Input):
     code: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=160)
-    severity_default: Literal['low','medium','high','critical'] = 'medium'
-    is_active: bool = True
 
 class CatalogChange(Input):
     row_version: int = Field(ge=1)
@@ -62,7 +60,6 @@ class DefectTypeEdit(Input):
     reason: str = Field(min_length=3,max_length=2000)
     code: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=160)
-    severity_default: Literal['low','medium','high','critical'] = 'medium'
 
 class SessionIn(Input):
     batch_id: UUID
@@ -88,7 +85,8 @@ class SessionPatch(Input):
 class DefectIn(Input):
     defect_type_id: UUID
     occurrence_count: int = Field(default=1,ge=1,le=1000000)
-    severity: Literal['low','medium','high','critical'] = 'medium'
+    level: Literal['nhe','trung_binh','nang']  # bắt buộc chọn, không có mặc định
+    note: str = Field(default='',max_length=2000)
     suspected_cause: str | None = Field(default=None,max_length=2000)
     verified_cause: str | None = Field(default=None,max_length=2000)
 

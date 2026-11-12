@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 from fastapi import Request
@@ -9,7 +9,7 @@ from .auth import MANAGERS, ApiError, case_access
 from .models import *
 
 def plain(value):
-    if isinstance(value,datetime): return value.isoformat()
+    if isinstance(value,(datetime,date)): return value.isoformat()
     if isinstance(value,Decimal): return format(value,'.2f')
     if isinstance(value,UUID): return str(value)
     if isinstance(value,dict): return {k:plain(v) for k,v in value.items()}
@@ -86,6 +86,12 @@ def replace_defects(db,case,defects,user):
         values=item.model_dump(mode='json'); type_id=values['defect_type_id']
         t=db.get(DefectType,type_id)
         if not t or (not t.is_active and type_id not in current): raise ApiError(422,'INVALID_DEFECT_TYPE','Loại lỗi không hợp lệ hoặc ngừng sử dụng')
+        level=db.scalar(select(DefectLevel).where(DefectLevel.defect_type_id==type_id,DefectLevel.level==values['level']))
+        unchanged=type_id in current and current[type_id].level==values['level']
+        if not level or (not level.enabled and not unchanged): raise ApiError(422,'LEVEL_DISABLED','Mức độ đã chọn chưa được Quản lý bật cho loại lỗi này',{'level':'Chọn mức đang dùng'})
+        if not unchanged:
+            values.update(level_id=level.id,level_criteria_snapshot=level.criteria)
+        values['priority_snapshot']=bool(t.priority_flag) if type_id not in current else current[type_id].priority_snapshot or bool(t.priority_flag)
         mark_catalog_used(db, DefectType, type_id)
         if item.verified_cause and not user.has(*MANAGERS): raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
         if type_id in current:

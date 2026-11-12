@@ -91,7 +91,7 @@ def test_same_serial_same_inspection_cannot_create_another_root(admin, create_se
     # Implementations may return the existing record or an explicit conflict.
     response = admin.post('/api/v1/defect-cases', json={
         'inspection_session_id': _id(session), 'serial_number':'STABLE-001',
-        'defects':[{'defect_type_id':seed['defect_type_ids'][0], 'occurrence_count':1,'severity':'medium'}]}, headers={'Idempotency-Key':str(uuid.uuid4())})
+        'defects':[{'defect_type_id':seed['defect_type_ids'][0], 'occurrence_count':1,'level':'trung_binh'}]}, headers={'Idempotency-Key':str(uuid.uuid4())})
     assert response.status_code in (200, 201, 409), response.text
     with SessionLocal() as db:
         assert db.scalar(select(func.count()).select_from(Unit)) == 1

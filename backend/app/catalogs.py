@@ -3,7 +3,7 @@ from uuid import UUID
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from .auth import MANAGERS, ApiError, current_user, require_role
@@ -59,6 +59,10 @@ def catalog_row(db, obj):
         for field in ('supervisor_id', 'backup_supervisor_id'):
             person = db.get(User, getattr(obj, field)) if getattr(obj, field) else None
             result[field.replace('_id', '')] = {'id': person.id, 'display_name': person.display_name, 'away_until': person.away_until.isoformat() if person.away_until else None} if person else None
+    if isinstance(obj, DefectType):
+        from .defect_config import levels_of
+        result['levels'] = [{'id': l.id, 'level': l.level, 'enabled': l.enabled, 'criteria': l.criteria, 'deadline_hours': l.deadline_hours,
+                             'suggested_actions': list(l.suggested_actions), 'priority': bool(obj.priority_flag)} for l in levels_of(db, obj.id)]
     if isinstance(obj, Batch):
         parent = db.get(ProductType, obj.product_type_id)
         result['product_type'] = {key: value for key, value in row(parent).items() if key not in KEY_FIELDS['product_types']}
@@ -143,6 +147,9 @@ def create_catalog(model, data, request, user, db):
         check_values(db, model, values)
         obj = model(**values); db.add(obj); db.flush()
         if model is Batch: mark_catalog_used(db, ProductType, obj.product_type_id)
+        if model is DefectType:
+            from .defect_config import ensure_levels
+            ensure_levels(db, obj.id)  # 3 mức tắt sẵn; Quản lý bật và điền tiêu chí
         audit(db, user, 'create', model.__tablename__, obj.id, {'after': row(obj)}, request.state.request_id)
         return catalog_row(db, obj)
     return write(db, user, request, data.model_dump(mode='json'), action, 201)
@@ -188,6 +195,12 @@ def mutate_catalog(kind, catalog_id, data, request, user, db, operation):
             obj.is_active = False
             result_operation = 'deactivate'
         else:
+            if isinstance(obj, DefectType):
+                # Loại lỗi chưa dùng: xóa luôn các mức và lịch sử giá của nó.
+                from .models import DefectLevel, MarketPriceHistory
+                level_ids = select(DefectLevel.id).where(DefectLevel.defect_type_id == obj.id)
+                db.execute(delete(MarketPriceHistory).where(MarketPriceHistory.level_id.in_(level_ids)))
+                db.execute(delete(DefectLevel).where(DefectLevel.defect_type_id == obj.id))
             db.delete(obj)
             result_operation = 'delete'
         if result_operation != 'delete': bump(obj)

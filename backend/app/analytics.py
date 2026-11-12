@@ -82,12 +82,12 @@ def pareto(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:
     require_role(user,*REPORT_VIEWERS)
     rows=db.execute(select(DefectType.id,DefectType.code,DefectType.name,func.sum(CaseDefect.occurrence_count),func.count(distinct(CaseDefect.case_id))).join(CaseDefect,CaseDefect.defect_type_id==DefectType.id).where(CaseDefect.case_id.in_(valid_cases(scope))).group_by(DefectType.id).order_by(func.sum(CaseDefect.occurrence_count).desc(),DefectType.name)).all()
     total=sum(r[3] for r in rows); cumulative=0; items=[]
-    severity_rank={'low':0,'medium':1,'high':2,'critical':3}
+    severity_rank={'nhe':0,'trung_binh':1,'nang':2}
     for id,code,name,count,affected in rows:
         cumulative+=count
-        severities=db.scalars(select(CaseDefect.severity).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope)))).all()
+        severities=db.scalars(select(CaseDefect.level).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope)))).all()
         costs=db.execute(select(CostEntry.currency,CostEntry.cost_status,func.sum(CostAllocation.allocated_amount),func.count(distinct(CaseDefect.case_id))).join(CostAllocation,CostAllocation.cost_entry_id==CostEntry.id).join(CaseDefect,CostAllocation.case_defect_id==CaseDefect.id).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope))).group_by(CostEntry.currency,CostEntry.cost_status)).all()
-        items.append({'defect_type_id':id,'code':code,'name':name,'occurrence_count':int(count),'affected_cases':affected,'cumulative_percentage':round(cumulative/total*100,2) if total else 0,'severity':max(severities,key=lambda x:severity_rank.get(x,0)),'allocated_costs':[{'currency':c,'cost_status':s,'amount':format(a,'.2f'),'covered_cases':n,'average_per_covered_case':format(a/n,'.2f')} for c,s,a,n in costs]})
+        items.append({'defect_type_id':id,'code':code,'name':name,'occurrence_count':int(count),'affected_cases':affected,'cumulative_percentage':round(cumulative/total*100,2) if total else 0,'level':max(severities,key=lambda x:severity_rank.get(x,0)),'allocated_costs':[{'currency':c,'cost_status':s,'amount':format(a,'.2f'),'covered_cases':n,'average_per_covered_case':format(a/n,'.2f')} for c,s,a,n in costs]})
     return {'items':items,'basis':'occurrences','numerator':total,'denominator':total,'scope':plain(scope),'data_as_of':report_time(db),'warnings':['Một sản phẩm nhiều loại lỗi xuất hiện trong nhiều nhóm. Tỷ trọng Pareto tính theo lượt lỗi, không phải sản phẩm. Chi phí trung bình chỉ dùng hồ sơ có phân bổ.']}
 
 @router.get('/trends')

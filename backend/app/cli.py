@@ -91,12 +91,21 @@ def seed_demo(password_env):
         b=Batch(product_type_id=p.id,lot_code='DEMO-LOT-001'); db.add(b); db.flush()
         started=now().replace(hour=1,minute=0,second=0,microsecond=0)
         s=InspectionSession(batch_id=b.id,line='Dây chuyền mẫu A',shift='Ca 1',stage='Kiểm tra cuối',inspected_count=100,sample_method='DỮ LIỆU MẪU · kiểm 100 sản phẩm độc lập',population_key='DEMO-population-100',started_at=started,created_by=admin.id); db.add(s)
-        types=[DefectType(code='DEMO-SCRATCH',name='Trầy xước',severity_default='low'),DefectType(code='DEMO-DIMENSION',name='Sai kích thước',severity_default='high'),DefectType(code='DEMO-CRACK',name='Nứt bề mặt',severity_default='critical')]
+        types=[DefectType(code='DEMO-SCRATCH',name='Trầy xước'),DefectType(code='DEMO-DIMENSION',name='Sai kích thước'),DefectType(code='DEMO-CRACK',name='Nứt bề mặt',priority_flag=True)]
         db.add_all(types); db.flush()
+        from .defect_config import ensure_levels, levels_of
+        criteria={'nhe':'Vết nhỏ, không ảnh hưởng chức năng','trung_binh':'Nhìn thấy rõ, cần sửa trước khi giao','nang':'Ảnh hưởng chức năng hoặc an toàn'}
+        prices={'nhe':'50000.00','trung_binh':'150000.00','nang':'400000.00'}
+        for t in types:
+            ensure_levels(db,t.id,enabled=True)
+            for l in levels_of(db,t.id):
+                l.criteria=criteria[l.level]+' · DỮ LIỆU MẪU'; l.market_price=__import__('decimal').Decimal(prices[l.level]); l.price_effective_from=started.date()
+                db.add(MarketPriceHistory(level_id=l.id,price=l.market_price,effective_from=l.price_effective_from,reason='DỮ LIỆU MẪU'))
+        level_of={'DEMO-SCRATCH':'nhe','DEMO-DIMENSION':'trung_binh','DEMO-CRACK':'nang'}
         for i in range(10):
             unit=Unit(batch_id=b.id,serial_number=f'DEMO-{i+1:04}',qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
             case=DefectCase(unit_id=unit.id,inspection_session_id=s.id,created_by=inspector.id,assigned_to=inspector.id,status='confirmed' if i<8 else 'draft',detected_at=started+timedelta(minutes=i+1),first_confirmed_at=started+timedelta(minutes=i+2) if i<8 else None,note='DỮ LIỆU MẪU · không dùng cho vận hành'); db.add(case); db.flush()
-            defect=CaseDefect(case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,severity=types[i%3].severity_default); db.add(defect); db.flush()
+            defect=CaseDefect(case_id=case.id,defect_type_id=types[i%3].id,defect_type_name_snapshot=types[i%3].name,defect_type_code_snapshot=types[i%3].code,occurrence_count=2 if i<4 else 1,level=level_of[types[i%3].code],priority_snapshot=types[i%3].priority_flag); db.add(defect); db.flush()
             db.add(CaseEvent(case_id=case.id,event_type='confirmed' if i<8 else 'created',actor_id=inspector.id,reason='DỮ LIỆU MẪU'))
             if i<4:
                 cost=CostEntry(case_id=case.id,category='repair',amount=__import__('decimal').Decimal('125000.00'),currency='VND',cost_status='actual',source_reference='DEMO-COST-'+str(i)); db.add(cost); db.flush()
