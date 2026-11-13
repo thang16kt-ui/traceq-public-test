@@ -1,5 +1,5 @@
 // Điều hướng theo vai trò (đặc tả mục 4).
-import { Bell, BookOpen, Bot, ClipboardCheck, ClipboardList, FileBarChart, History, LayoutDashboard, ListChecks, Package, QrCode, ScrollText, Server, Settings2, Tags, User, Users } from 'lucide-react';
+import { Bell, BookOpen, FilePlus, Bot, ClipboardCheck, ClipboardList, FileBarChart, History, LayoutDashboard, ListChecks, Package, QrCode, ScrollText, Server, Settings2, Tags, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem { path: string; label: string; icon: LucideIcon }
@@ -42,6 +42,8 @@ export const SIDEBAR: Record<string, NavItem[]> = {
   quan_ly: [
     { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
     { path: '/de-xuat', label: 'Đề xuất', icon: ClipboardList },
+    { path: '/tao', label: 'Tạo đề xuất', icon: FilePlus },
+    { path: '/quet', label: 'Quét QR', icon: QrCode },
     { path: '/bao-cao', label: 'Báo cáo', icon: FileBarChart },
     { path: '/tu-dong-duyet', label: 'Tự động duyệt', icon: Bot },
     { path: '/danh-muc', label: 'Danh mục lỗi', icon: Tags },
@@ -65,3 +67,6 @@ export const HOME: Record<string, string> = {
 export const EXTRA_LINKS: NavItem[] = [
   { path: '/tra-cuu', label: 'Tra cứu', icon: BookOpen },
 ];
+
+/** Vai trò được tạo đề xuất (server cũng kiểm tra). */
+export const CAN_CREATE = ['nguoi_tao', 'quan_ly'];

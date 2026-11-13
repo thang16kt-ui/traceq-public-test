@@ -1,6 +1,7 @@
 // Tổng quan (Quản lý): bộ lọc kỳ/sản phẩm/loại lỗi; KPI; Pareto; chi phí theo tuần + dự báo; xu hướng; phương án; đề xuất cần xử lý.
 import { useState } from 'react';
 import { download, get, query } from '../lib/api';
+import { navigate } from '../lib/router';
 import type { Row } from '../lib/api';
 import { formatMoney, formatNumber, formatPercent, vnDateInput } from '../lib/format';
 import { Alert, Button, Card, Chips, ErrorBox, Loading, PageHeader, Select, TextInput, useLoad, useToast } from '../ui/components';
@@ -34,7 +35,7 @@ export default function Dashboard() {
   const f = data?.forecast;
   return <div className="page">
     <PageHeader title="Tổng quan" subtitle={data ? `Kỳ ${data.period.from.split('-').reverse().join('/')} – ${data.period.to.split('-').reverse().join('/')}` : undefined}
-      actions={<Button onClick={reload}>Làm mới</Button>} />
+      actions={<><Button onClick={reload}>Làm mới</Button><Button onClick={() => navigate('/quet')}>Quét QR</Button><Button variant="primary" onClick={() => navigate('/tao')}>Tạo đề xuất</Button></>} />
     <div className="filters">
       <Chips label="Kỳ" value={preset} onChange={setPreset} options={[{ value: '7', label: '7 ngày' }, { value: '30', label: '30 ngày' }, { value: 'thang', label: 'Tháng này' }, { value: 'tuy_chon', label: 'Tùy chọn' }]} />
       {preset === 'tuy_chon' && <><TextInput label="Từ ngày" type="date" value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />

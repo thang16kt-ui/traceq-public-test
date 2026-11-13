@@ -322,3 +322,7 @@ h3.sub { font-size: .95rem; margin: 14px 0 8px; }
 .progress-label { font-size: .85rem; color: var(--ink-2); margin-bottom: 4px; }
 .progress-track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
 .progress-track span { display: block; height: 100%; background: var(--brand); }
+.role-switch select { min-height: 36px; padding: 4px 8px; font-size: .85rem; width: auto; border-radius: 8px; }
+.side-role { padding: 4px 12px 8px; }
+.side-role select { width: 100%; background: #1b3a3c; color: #fff; border-color: #2a4a4c; }
+@media (max-width: 520px) { .top-brand span:last-child { display: none; } .topbar { gap: 0; padding-left: 8px; } .top-role select { max-width: 112px; } }
