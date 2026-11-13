@@ -1,0 +1,33 @@
+# New TraceQ deployment from the uploaded 22365ba application.
+# Only the web service is managed here. The existing Postgres instance is
+# referenced for provisioning a separate logical database, not adopted.
+services:
+  - type: web
+    name: traceq-moi-20261113
+    runtime: docker
+    repo: https://github.com/thang16kt-ui/traceq-public-test
+    branch: traceq-moi-20261113
+    region: singapore
+    plan: free
+    dockerfilePath: ./deploy/public.Dockerfile
+    dockerContext: .
+    dockerCommand: python scripts/run_isolated.py
+    autoDeployTrigger: 'off'
+    healthCheckPath: /health/ready
+    envVars:
+      - key: TRACEQ_PROVISIONING_DATABASE_URL
+        fromDatabase:
+          name: traceq-public-test-db-m2sk
+          property: connectionString
+      - key: TRACEQ_DATABASE_NAME
+        value: traceq_moi_20261113_demo
+      - key: ENVIRONMENT
+        value: demo
+      - key: SEED_DEMO
+        value: 'true'
+      - key: DEMO_PASSWORD
+        generateValue: true
+      - key: DATA_DIR
+        value: /tmp/traceq-new
+      - key: COOKIE_SECURE
+        value: 'true'
