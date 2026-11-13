@@ -59,10 +59,10 @@ DEMO_ACCOUNTS=[('demo.nguoitao','NV001','Người tạo · DỮ LIỆU MẪU',['
                ('demo.giamsat2','NV006','Giám sát thay thế · DỮ LIỆU MẪU',['giam_sat']),
                ('demo.captren','NV003','Cấp trên · DỮ LIỆU MẪU',['cap_tren']),
                ('demo.quanly','NV004','Quản lý · DỮ LIỆU MẪU',['quan_ly']),
-               ('demo.admin','NV005','Admin · DỮ LIỆU MẪU',['admin'])]
+               ('demo.admin','NV005','Admin · DỮ LIỆU MẪU',['admin','quan_ly'])]
 
 def ensure_demo_accounts(db,password):
-    """Chỉ cho môi trường demo: tạo tài khoản mẫu còn thiếu cho từng vai trò (không đổi tài khoản đã có)."""
+    """Chỉ cho môi trường demo: tạo tài khoản mẫu còn thiếu; tài khoản mẫu đã có chỉ được bổ sung vai trò còn thiếu."""
     result={}
     for username,code,name,roles in DEMO_ACCOUNTS:
         user=db.scalar(select(User).where(User.username==username))
@@ -71,6 +71,10 @@ def ensure_demo_accounts(db,password):
             user=User(username=username,code=None if taken else code,display_name=name,roles=roles,password_hash=hash_password(password))
             db.add(user); db.flush()
             db.add(AuditLog(actor_id=None,action='seed_demo_user',entity_type='users',entity_id=user.id,changed_fields={'username':username,'roles':roles},reason='DỮ LIỆU MẪU',request_id=uid()))
+        elif ENVIRONMENT=='demo' and set(roles)-set(user.roles):
+            # Tài khoản mẫu đã có từ bản trước: bổ sung vai trò còn thiếu (vd. demo.admin thêm Quản lý để thử tạo đề xuất).
+            added=sorted(set(roles)-set(user.roles)); user.roles=list(user.roles)+added
+            db.add(AuditLog(actor_id=None,action='update_user',entity_type='users',entity_id=user.id,changed_fields={'added_roles':added},reason='DỮ LIỆU MẪU: bổ sung vai trò tài khoản mẫu',request_id=uid()))
         result[username]=user
     return result
 

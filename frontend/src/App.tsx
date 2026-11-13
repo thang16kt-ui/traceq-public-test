@@ -1,11 +1,11 @@
 // Khung ứng dụng: đăng nhập, điều hướng theo vai trò, banner máy chủ đang khởi động.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bell, Search as SearchIcon, User as UserIcon } from 'lucide-react';
+import { Bell, Plus, QrCode, Search as SearchIcon, User as UserIcon } from 'lucide-react';
 import { get, onServerState, onUnauthorized, post, setCSRF } from './lib/api';
 import type { Row, ServerState } from './lib/api';
 import { ROLE_LABELS } from './lib/labels';
-import { BOTTOM_NAV, HOME, SIDEBAR } from './lib/nav';
+import { BOTTOM_NAV, CAN_CREATE, HOME, SIDEBAR } from './lib/nav';
 import { navigate, useRoute } from './lib/router';
 import { defaultRole, safeStorage, SessionContext } from './lib/session';
 import type { Session } from './lib/session';
@@ -24,8 +24,18 @@ function ServerBanner() {
   </div>;
 }
 
+function RoleSwitch({ session, className }: { session: Session; className?: string }) {
+  const { user, activeRole, setActiveRole } = session;
+  if (user.roles.length < 2) return <span className={className}>{ROLE_LABELS[activeRole]}</span>;
+  return <label className={`role-switch ${className || ''}`}><span className="sr-only">Chế độ làm việc</span>
+    <select value={activeRole} onChange={(e) => setActiveRole(e.target.value)} aria-label="Chế độ làm việc">
+      {user.roles.map((r: string) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+    </select></label>;
+}
+
 function Shell({ session, children, path, unread }: { session: Session; children: ReactNode; path: string; unread: number }) {
   const { activeRole, user } = session;
+  const canCreate = CAN_CREATE.includes(activeRole);
   const bottom = BOTTOM_NAV[activeRole] || [];
   const side = SIDEBAR[activeRole];
   const isActive = (p: string) => path === p || path.startsWith(p + '/');
@@ -37,11 +47,14 @@ function Shell({ session, children, path, unread }: { session: Session; children
         <a href="#/tra-cuu" className={`side-item ${isActive('/tra-cuu') ? 'active' : ''}`}><SearchIcon size={20} aria-hidden />Tra cứu</a>
         <a href="#/thong-bao" className={`side-item ${isActive('/thong-bao') ? 'active' : ''}`}><Bell size={20} aria-hidden />Thông báo{unread > 0 && <span className="count">{unread}</span>}</a>
         <a href="#/toi" className={`side-item ${isActive('/toi') ? 'active' : ''}`}><UserIcon size={20} aria-hidden />{user.display_name}<small>{ROLE_LABELS[activeRole]}</small></a>
+        {user.roles.length > 1 && <RoleSwitch session={session} className="side-role" />}
       </div>
     </aside>}
     <header className="topbar">
       <a className="top-brand" href={'#' + HOME[activeRole]}><span className="logo" aria-hidden>TQ</span><span>TraceQ</span></a>
-      <span className="top-role">{ROLE_LABELS[activeRole]}</span>
+      <RoleSwitch session={session} className="top-role" />
+      {canCreate && <a href="#/tao" className="icon-btn" aria-label="Tạo đề xuất"><Plus size={22} /></a>}
+      <a href="#/quet" className="icon-btn" aria-label="Quét QR"><QrCode size={22} /></a>
       <a href="#/tra-cuu" className="icon-btn" aria-label="Tra cứu"><SearchIcon size={22} /></a>
       <a href="#/thong-bao" className="icon-btn" aria-label={`Thông báo${unread ? `, ${unread} chưa đọc` : ''}`}><Bell size={22} />{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}</a>
       <a href="#/toi" className="icon-btn" aria-label="Tôi"><UserIcon size={22} /></a>

@@ -33,7 +33,9 @@ function NotFound() {
 }
 
 function Forbidden() {
-  return <div className="page"><Empty title="Bạn không có quyền xem màn hình này">Đổi chế độ làm việc ở màn “Tôi” nếu tài khoản có nhiều vai trò.</Empty></div>;
+  return <div className="page"><Empty title="Vai trò hiện tại không dùng được màn hình này">
+    Tạo đề xuất cần vai trò Người tạo hoặc Quản lý; duyệt cần Giám sát/Cấp trên. Nếu tài khoản có nhiều vai trò, đổi “Chế độ làm việc” ở thanh trên.
+    Nếu chưa có vai trò cần thiết, nhờ Admin thêm ở màn Người dùng.</Empty></div>;
 }
 
 type Entry = { roles?: string[]; render: (route: Route, session: Session) => ReactNode };
