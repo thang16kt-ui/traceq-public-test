@@ -5,7 +5,7 @@ import type { Row } from '../lib/api';
 import { formatTime, vnDateInput } from '../lib/format';
 import { Alert, Badge, Button, Card, Checkbox, ErrorBox, Loading, PageHeader, Pager, Select, TextInput, useLoad, useToast } from '../ui/components';
 
-const SECTIONS: [string, string][] = [['kpi', 'Chỉ số chính (KPI)'], ['pareto', 'Pareto chi phí theo loại lỗi'], ['de_xuat', 'Bảng đề xuất'], ['ma_bam', 'Mã băm ảnh minh chứng (SHA-256)'], ['anh', 'Đính kèm bộ ảnh theo đề xuất (tệp lớn)']];
+const SECTIONS: [string, string][] = [['kpi', 'Chỉ số chính (KPI)'], ['pareto', 'Pareto chi phí theo loại lỗi'], ['tu_dong', 'Tự động duyệt (số đo trong kỳ)'], ['de_xuat', 'Bảng đề xuất'], ['ma_bam', 'Mã băm ảnh minh chứng (SHA-256)'], ['anh', 'Đính kèm bộ ảnh theo đề xuất (tệp lớn)']];
 const DAYS = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ nhật'];
 
 function Schedule({ smtp }: { smtp: boolean }) {
@@ -35,7 +35,7 @@ function Schedule({ smtp }: { smtp: boolean }) {
 export default function Reports() {
   const toast = useToast();
   const today = vnDateInput();
-  const [form, setForm] = useState<Row>({ date_from: today.slice(0, 8) + '01', date_to: today, product_type_id: '', sections: ['kpi', 'pareto', 'de_xuat', 'ma_bam'] });
+  const [form, setForm] = useState<Row>({ date_from: today.slice(0, 8) + '01', date_to: today, product_type_id: '', sections: ['kpi', 'pareto', 'tu_dong', 'de_xuat', 'ma_bam'] });
   const [busy, setBusy] = useState('');
   const [page, setPage] = useState(1);
   const products = useLoad((s) => get('/product-types?state=all&page_size=100', s), []);
