@@ -41,7 +41,10 @@ def test_priority_always_notified_even_if_disabled_and_prefs_respected(clients, 
     assert len(notes('supervisor_test', 'uu_tien')) == 1 and len(notes('manager_test', 'uu_tien')) == 1
     assert notes('supervisor_test', 'can_duyet') == []  # đã tắt
     submit_evidence(creator, case['id'])
-    step(clients['supervisor_test'], case['id'], 'tu_choi', 'Chụp lại')
+    # Lỗi ưu tiên chờ xác nhận: báo Quản lý (người duyệt duy nhất), không báo Giám sát.
+    assert any('Cần xác nhận lỗi' in n.title for n in notes('manager_test', 'uu_tien'))
+    assert not any('Cần xác nhận lỗi' in n.title for n in notes('supervisor_test', 'uu_tien'))
+    step(clients['manager_test'], case['id'], 'tu_choi', 'Chụp lại')
     assert len(notes('inspector_test', 'bi_tu_choi')) == 1
 
 

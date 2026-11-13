@@ -1,8 +1,13 @@
 """Máy trạng thái đề xuất (đặc tả mục 7).
 
-Nháp → Chờ minh chứng → Chờ xác nhận → Chờ chọn phương án → [Chờ cấp trên] → Đang xử lý
-→ Chờ kiểm tra đóng → Đã đóng.
-Nhánh: Từ chối → Chờ minh chứng; Cấp trên từ chối → Chờ chọn phương án; Yêu cầu làm lại → Đang xử lý.
+Nháp → Chờ minh chứng → Chờ xác nhận → Chờ chọn phương án → Đang xử lý → Chờ kiểm tra đóng → Đã đóng.
+Nhánh: Từ chối → Chờ minh chứng; Yêu cầu làm lại → Đang xử lý.
+
+MỘT cấp duyệt (không còn bước Cấp trên):
+- Lỗi ưu tiên: Quản lý duyệt (xác nhận, chốt phương án, đóng).
+- Lỗi thường: hệ thống tự động duyệt khi đủ ảnh minh chứng (xem auto.py); thiếu ảnh → trả người tạo;
+  không tự duyệt được (độ tin cậy thấp, Hủy, vượt ngưỡng chi phí…) → Giám sát duyệt.
+"Chờ cấp trên" chỉ còn cho đề xuất cũ đã ở trạng thái này: Quản lý Phê duyệt/Từ chối để giải phóng.
 "Quá hạn" là cờ tính theo hạn xử lý, KHÔNG phải trạng thái.
 
 MỌI thay đổi trạng thái đi qua `transition()`: kiểm quyền + kiểm chuyển hợp lệ + ghi
@@ -28,13 +33,15 @@ SUPERVISOR = 'supervisor'
 CREATOR = 'creator'
 APPROVER = 'approver'
 MANAGER = 'manager'
+# Các bước duyệt: với lỗi ưu tiên chỉ Quản lý được làm.
+REVIEW_ACTIONS = ('xac_nhan_loi', 'tu_choi', 'chot_phuong_an', 'dong_de_xuat', 'yeu_cau_lam_lai')
 
 
 @dataclass(frozen=True)
 class Action:
     label: str            # tên nút cố định trên giao diện
     sources: tuple        # trạng thái được phép bắt đầu
-    target: str | None    # None = do bên gọi quyết định (vd. chốt phương án → cấp trên hoặc xử lý)
+    target: str | None
     actor: str            # nhóm người được làm
     reason_required: bool = False
     dedicated: bool = False  # cần API riêng vì có dữ liệu đi kèm (minh chứng, phương án, chi phí)
@@ -45,7 +52,8 @@ ACTIONS = {
     'gui_minh_chung': Action('Gửi minh chứng', ('cho_minh_chung',), 'cho_xac_nhan', CREATOR, dedicated=True),
     'xac_nhan_loi': Action('Xác nhận lỗi', ('cho_xac_nhan',), 'cho_phuong_an', SUPERVISOR),
     'tu_choi': Action('Từ chối', ('cho_xac_nhan',), 'cho_minh_chung', SUPERVISOR, reason_required=True),
-    'chot_phuong_an': Action('Chốt phương án', ('cho_phuong_an',), None, SUPERVISOR, dedicated=True),
+    'chot_phuong_an': Action('Chốt phương án', ('cho_phuong_an',), 'dang_xu_ly', SUPERVISOR, dedicated=True),
+    # Chỉ để giải phóng đề xuất cũ còn ở "Chờ cấp trên" (đã bỏ bước này): Quản lý xử lý.
     'phe_duyet': Action('Phê duyệt', ('cho_cap_tren',), 'dang_xu_ly', APPROVER),
     'cap_tren_tu_choi': Action('Từ chối', ('cho_cap_tren',), 'cho_phuong_an', APPROVER, reason_required=True),
     'hoan_tat_xu_ly': Action('Hoàn tất xử lý', ('dang_xu_ly',), 'cho_dong', SUPERVISOR, dedicated=True),
@@ -63,13 +71,11 @@ class InvalidTransition(ApiError):
         super().__init__(409, 'INVALID_TRANSITION', f'Không thể "{ACTIONS[action].label if action in ACTIONS else action}" khi đề xuất đang ở trạng thái "{label}"')
 
 
-def next_status(status, action, needs_approval=False):
+def next_status(status, action):
     """Hàm thuần: trạng thái kế tiếp hoặc InvalidTransition."""
     spec = ACTIONS.get(action)
     if not spec or status not in spec.sources:
         raise InvalidTransition(status, action)
-    if action == 'chot_phuong_an':
-        return 'cho_cap_tren' if needs_approval else 'dang_xu_ly'
     return spec.target
 
 
@@ -117,12 +123,14 @@ def actor_allowed(db, user, case, action):
     if spec.actor == CREATOR:
         return case.created_by == user.id or user.has(*MANAGERS)
     if spec.actor == APPROVER:
-        # Cấp trên không duyệt đề xuất do chính mình tạo.
-        return user.has('cap_tren') and case.created_by != user.id
+        # Đề xuất cũ còn "Chờ cấp trên": Quản lý giải phóng (không duyệt đề xuất do chính mình tạo).
+        return user.has('quan_ly') and case.created_by != user.id
     if spec.actor == SUPERVISOR:
         # Nguyên tắc 4 mắt: người tạo không tự xác nhận/đóng đề xuất của mình.
         if case.created_by == user.id:
             return False
+        if case.priority and action in REVIEW_ACTIONS:
+            return user.has('quan_ly')  # lỗi ưu tiên: chỉ Quản lý duyệt
         return is_case_supervisor(db, user, case) or user.has('quan_ly')
     return user.has('quan_ly')
 
@@ -135,14 +143,14 @@ def allowed_actions(db, user, case):
 AFTER_TRANSITION = []
 
 
-def transition(db, case, action, actor, request_id, reason=None, *, actor_kind='nguoi', needs_approval=False, meta=None):
+def transition(db, case, action, actor, request_id, reason=None, *, actor_kind='nguoi', meta=None):
     """Đổi trạng thái một đề xuất ĐÃ khóa dòng (SELECT … FOR UPDATE).
 
     actor: User (người) hoặc None với actor_kind 'tu_dong' / 'he_thong'.
     """
     from .services import audit, bump
     source = case.status
-    target = next_status(source, action, needs_approval)
+    target = next_status(source, action)
     spec = ACTIONS[action]
     if actor_kind == 'nguoi':
         if actor is None or not actor_allowed(db, actor, case, action):

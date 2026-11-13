@@ -57,12 +57,12 @@ def create_user(username,display_name,roles,password_env=None,code=None):
 DEMO_ACCOUNTS=[('demo.nguoitao','NV001','Người tạo · DỮ LIỆU MẪU',['nguoi_tao']),
                ('demo.giamsat','NV002','Giám sát · DỮ LIỆU MẪU',['giam_sat']),
                ('demo.giamsat2','NV006','Giám sát thay thế · DỮ LIỆU MẪU',['giam_sat']),
-               ('demo.captren','NV003','Cấp trên · DỮ LIỆU MẪU',['cap_tren']),
+               ('demo.captren','NV003','Cấp trên (chỉ xem) · DỮ LIỆU MẪU',['cap_tren']),
                ('demo.quanly','NV004','Quản lý · DỮ LIỆU MẪU',['quan_ly']),
-               ('demo.admin','NV005','Admin · DỮ LIỆU MẪU',['admin','quan_ly'])]
+               ('demo.admin','NV005','Admin · DỮ LIỆU MẪU',['admin'])]  # Admin: quản lý người dùng; duyệt lỗi ưu tiên là việc của Quản lý
 
 def ensure_demo_accounts(db,password):
-    """Chỉ cho môi trường demo: tạo tài khoản mẫu còn thiếu; tài khoản mẫu đã có chỉ được bổ sung vai trò còn thiếu."""
+    """Tạo tài khoản mẫu còn thiếu. Môi trường demo: đưa vai trò tài khoản mẫu đã có về đúng danh sách DEMO_ACCOUNTS."""
     result={}
     for username,code,name,roles in DEMO_ACCOUNTS:
         user=db.scalar(select(User).where(User.username==username))
@@ -71,10 +71,10 @@ def ensure_demo_accounts(db,password):
             user=User(username=username,code=None if taken else code,display_name=name,roles=roles,password_hash=hash_password(password))
             db.add(user); db.flush()
             db.add(AuditLog(actor_id=None,action='seed_demo_user',entity_type='users',entity_id=user.id,changed_fields={'username':username,'roles':roles},reason='DỮ LIỆU MẪU',request_id=uid()))
-        elif ENVIRONMENT=='demo' and set(roles)-set(user.roles):
-            # Tài khoản mẫu đã có từ bản trước: bổ sung vai trò còn thiếu (vd. demo.admin thêm Quản lý để thử tạo đề xuất).
-            added=sorted(set(roles)-set(user.roles)); user.roles=list(user.roles)+added
-            db.add(AuditLog(actor_id=None,action='update_user',entity_type='users',entity_id=user.id,changed_fields={'added_roles':added},reason='DỮ LIỆU MẪU: bổ sung vai trò tài khoản mẫu',request_id=uid()))
+        elif ENVIRONMENT=='demo' and set(roles)!=set(user.roles):
+            # Tài khoản mẫu từ bản trước: đưa vai trò về đúng phân công hiện tại (vd. demo.admin chỉ còn Admin).
+            before=list(user.roles); user.roles=list(roles)
+            db.add(AuditLog(actor_id=None,action='update_user',entity_type='users',entity_id=user.id,changed_fields={'roles':{'before':before,'after':list(roles)}},reason='DỮ LIỆU MẪU: phân công vai trò tài khoản mẫu',request_id=uid()))
         result[username]=user
     return result
 
@@ -84,7 +84,7 @@ def seed_history(db,accounts,product,batch,types,started):
     from decimal import Decimal
     from .defect_config import levels_of
     rng=random.Random(2026)
-    creator,supervisor,approver=accounts['demo.nguoitao'],accounts['demo.giamsat'],accounts['demo.captren']
+    creator,supervisor=accounts['demo.nguoitao'],accounts['demo.giamsat']
     levels={t.id:{l.level:l for l in levels_of(db,t.id)} for t in types}
     def make_case(serial,session,status,moment,type_,level,qty,priority=False):
         unit=Unit(batch_id=batch.id,serial_number=serial,qr_token=__import__('secrets').token_urlsafe(32)); db.add(unit); db.flush()
@@ -112,8 +112,8 @@ def seed_history(db,accounts,product,batch,types,started):
             method=rng.choice(['sua']*6+['tai_che','huy'])
             est=(lv.market_price*qty) if method=='sua' else (product.unit_cost if method=='huy' else product.unit_cost-product.salvage_value)
             db.add(Treatment(case_id=case.id,method=method,est_cost=est,est_source='gia_thi_truong' if method=='sua' else 'gia_von',est_sample_n=0,est_breakdown=[],
-                             deadline_at=case.deadline_at,needs_approval=method=='huy',approval_reasons=['Phương án Hủy'] if method=='huy' else [],status='hieu_luc',
-                             decided_by=supervisor.id,decided_at=moment+timedelta(hours=2),approved_by=approver.id if method=='huy' else None))
+                             deadline_at=case.deadline_at,needs_approval=False,approval_reasons=[],status='hieu_luc',
+                             decided_by=supervisor.id,decided_at=moment+timedelta(hours=2)))
             actual=(est*Decimal(str(rng.uniform(0.7,1.3)))).quantize(Decimal('1'))
             db.add(CostActual(case_id=case.id,material=actual,hours=0,hourly_rate=0,other=0,total=actual,root_causes=[rng.choice(['Máy móc','Con người','Nguyên vật liệu','Phương pháp'])],
                               entered_by=supervisor.id,entered_at=moment+timedelta(days=1)))
@@ -124,13 +124,12 @@ def seed_history(db,accounts,product,batch,types,started):
                             population_key='DEMO-TODAY',started_at=started,inspected_count=120,created_by=supervisor.id)
     db.add(today); db.flush()
     plan=[('nhap',0,'nhe'),('nhap',1,'trung_binh'),('cho_minh_chung',0,'nhe'),('cho_minh_chung',1,'nang'),('cho_xac_nhan',0,'trung_binh'),('cho_xac_nhan',2,'nhe'),
-          ('cho_phuong_an',1,'trung_binh'),('cho_cap_tren',2,'nang'),('dang_xu_ly',0,'trung_binh'),('cho_dong',1,'nhe')]
+          ('cho_phuong_an',1,'trung_binh'),('cho_xac_nhan',2,'nang'),('dang_xu_ly',0,'trung_binh'),('cho_dong',1,'nhe')]
     for n,(status,t,level) in enumerate(plan):
         case,lv=make_case(f'DEMO-{n+1:04}',today,status,started+timedelta(minutes=10*n),types[t],level,1+n%2)
-        if status in ('cho_cap_tren','dang_xu_ly','cho_dong'):
+        if status in ('dang_xu_ly','cho_dong'):
             db.add(Treatment(case_id=case.id,method='sua',est_cost=lv.market_price*(1+n%2),est_source='gia_thi_truong',est_sample_n=0,est_breakdown=[],deadline_at=case.deadline_at,
-                             needs_approval=status=='cho_cap_tren',approval_reasons=['Có lỗi ưu tiên'] if status=='cho_cap_tren' else [],
-                             status='cho_duyet' if status=='cho_cap_tren' else 'hieu_luc',decided_by=supervisor.id,decided_at=started+timedelta(minutes=10*n+5)))
+                             needs_approval=False,approval_reasons=[],status='hieu_luc',decided_by=supervisor.id,decided_at=started+timedelta(minutes=10*n+5)))
         if status=='cho_dong':
             db.add(CostActual(case_id=case.id,material=lv.market_price,hours=0,hourly_rate=0,other=0,total=lv.market_price,root_causes=['Máy móc'],entered_by=supervisor.id))
     db.flush()

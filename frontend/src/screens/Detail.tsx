@@ -81,7 +81,7 @@ export default function Detail({ id }: { id: string }) {
     </Card>
 
     {confirm && <ConfirmDialog title={ACTION_LABELS[confirm]} danger requireReason confirmLabel={ACTION_LABELS[confirm]}
-      message={confirm === 'tu_choi' ? 'Đề xuất sẽ quay lại bước chụp minh chứng.' : confirm === 'cap_tren_tu_choi' ? 'Đề xuất quay lại giám sát để chọn lại phương án.' : confirm === 'yeu_cau_lam_lai' ? 'Đề xuất quay lại bước Đang xử lý.' : `Đề xuất sẽ chuyển sang "${STATUS_LABELS.da_huy}". Lịch sử được giữ nguyên.`}
+      message={confirm === 'tu_choi' ? 'Đề xuất sẽ quay lại bước chụp minh chứng.' : confirm === 'cap_tren_tu_choi' ? 'Đề xuất quay lại bước chọn phương án.' : confirm === 'yeu_cau_lam_lai' ? 'Đề xuất quay lại bước Đang xử lý.' : `Đề xuất sẽ chuyển sang "${STATUS_LABELS.da_huy}". Lịch sử được giữ nguyên.`}
       onClose={() => setConfirm(null)} onConfirm={(reason) => act(confirm, reason)} />}
   </div>;
 }

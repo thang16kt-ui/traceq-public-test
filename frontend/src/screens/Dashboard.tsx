@@ -47,7 +47,7 @@ export default function Dashboard() {
       <div className="kpi-grid">
         <Kpi label="Quá hạn" value={String(k.overdue)} tone={k.overdue ? 'bad' : undefined} hint="đề xuất đang mở" />
         <Kpi label="Chờ giám sát" value={String(k.waiting_supervisor)} hint="chờ xác nhận lỗi" />
-        <Kpi label="Chờ cấp trên" value={String(k.waiting_approver)} />
+        <Kpi label="Lỗi ưu tiên chờ Quản lý" value={String(k.waiting_approver)} />
         <Kpi label="Tỷ lệ sản phẩm lỗi" value={k.defect_rate == null ? 'Chưa tính được' : formatPercent(k.defect_rate, 2)} hint={`${k.defective_count} lỗi / ${k.inspected_count ?? '?'} đã kiểm`} />
         <Kpi label="Số lỗi / sản phẩm lỗi" value={k.defects_per_product == null ? '—' : formatNumber(k.defects_per_product, 2)} />
         <Kpi label="Chi phí kỳ này" value={formatMoney(k.period_cost)} hint="chi phí thực tế đã nhập" />
@@ -69,7 +69,7 @@ export default function Dashboard() {
         <Card title="Tỷ lệ phương án trong kỳ"><MethodShare rows={data.methods} /></Card>
       </div>
       <Card title="Đề xuất cần xử lý" actions={<Button onClick={() => download('/dashboard/todo.xlsx' + query({ product_type_id: product, defect_type_id: type }), 'de-xuat-can-xu-ly.xlsx').catch((e) => toast(e.message, 'error'))}>Xuất Excel</Button>}>
-        <div className="embedded-list"><ProposalList title="" view="all" defaultFilter="dang_mo" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'cho_cap_tren', label: 'Chờ cấp trên' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /></div>
+        <div className="embedded-list"><ProposalList title="" view="all" defaultFilter="dang_mo" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /></div>
       </Card>
     </>}
   </div>;

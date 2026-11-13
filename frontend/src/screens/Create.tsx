@@ -58,7 +58,7 @@ function ItemEditor({ item, types, onChange, onRemove, index, canRemove, errors 
       <option value="">— Chọn loại lỗi —</option>
       {types.map((t) => <option key={t.id} value={t.id}>{t.name}{t.priority_flag ? ' (ƯU TIÊN)' : ''}</option>)}
     </Select>
-    {type?.priority_flag && <Alert tone="priority" title="Lỗi ưu tiên">Loại lỗi đặc biệt: giám sát và quản lý được báo ngay, luôn cần người duyệt và lên cấp trên.</Alert>}
+    {type?.priority_flag && <Alert tone="priority" title="Lỗi ưu tiên">Loại lỗi đặc biệt: Quản lý được báo ngay và trực tiếp duyệt (không tự động duyệt).</Alert>}
     <Stepper label="Số lượng lỗi (số vị trí lỗi trên sản phẩm)" value={item.occurrence_count} onChange={(n) => onChange({ ...item, occurrence_count: n })} />
     {type && <Segmented label="Mức độ" required value={item.level} error={errors.level} onChange={(v) => onChange({ ...item, level: v })}
       options={LEVELS.map((l) => ({ value: l, label: LEVEL_LABELS[l], disabled: !levels.some((x: Row) => x.level === l) }))} />}

@@ -1,4 +1,4 @@
-"""Cài đặt chung do Quản lý chỉnh: ngưỡng cấp trên, đơn giá giờ công, ca/công đoạn, nhắc việc…
+"""Cài đặt chung do Quản lý chỉnh: ngưỡng chi phí tự động duyệt, đơn giá giờ công, ca/công đoạn, nhắc việc…
 
 Chỉ lưu giá trị khác mặc định. Mỗi lần đổi ghi audit_log (trước/sau).
 """
@@ -65,13 +65,13 @@ def _email(v):
 
 # key: (mặc định, hàm kiểm tra, mô tả)
 SETTINGS = {
-    'approval_threshold': ('2000000', _money, 'Ngưỡng chi phí ước tính (VND) phải lên cấp trên'),
+    'approval_threshold': ('2000000', _money, 'Ngưỡng chi phí ước tính (VND): vượt ngưỡng thì không tự động duyệt, Giám sát duyệt'),
     'hourly_rate': ('50000', _money, 'Đơn giá giờ công mặc định (VND/giờ)'),
     'cost_min_samples': (5, _int(1, 100), 'Số lần sửa tối thiểu để dùng dữ liệu thực tế (N)'),
     'cost_window_days': (90, _int(7, 730), 'Cửa sổ dữ liệu thực tế (ngày)'),
     'end_of_day_time': ('16:30', _time, 'Giờ nhắc cuối ngày (giờ Việt Nam)'),
     'cost_reminder_days': (2, _int(1, 60), 'Nhắc nhập chi phí thực tế sau (ngày)'),
-    'escalation_hours': (24, _int(1, 720), 'Quá hạn bao lâu thì báo Quản lý/Cấp trên (giờ)'),
+    'escalation_hours': (24, _int(1, 720), 'Quá hạn bao lâu thì báo Quản lý (giờ)'),
     'repeat_defect_count': (3, _int(2, 100), 'Cảnh báo lỗi lặp lại khi cùng loại lỗi/lô đạt (lần trong 7 ngày)'),
     'lines': (['Dây chuyền 1'], _names, 'Danh sách dây chuyền'),
     'shifts': (['Ca 1', 'Ca 2', 'Ca 3'], _names, 'Danh sách ca'),

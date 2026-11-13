@@ -1,4 +1,4 @@
-"""Chọn phương án (Sửa/Tái chế/Hủy/Khác) + định tuyến cấp trên theo rủi ro."""
+"""Chọn phương án (Sửa/Tái chế/Hủy/Khác). Một cấp duyệt: phương án chốt có hiệu lực ngay."""
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .auth import ApiError, current_user
-from .costing import SOURCE_LABELS, approval_reasons, estimate_for_case
+from .costing import SOURCE_LABELS, estimate_for_case
 from .db import get_db
 from .models import METHOD_LABELS, CaseDefect, DefectLevel, Treatment, User, now
 from .proposals import DETAIL_EXTENSIONS, detail, get_case
@@ -39,9 +39,9 @@ def suggested_methods(db, case):
 
 def preview(db, case, method):
     est = estimate_for_case(db, case, method)
-    reasons = approval_reasons(est.cost, get_decimal(db, 'approval_threshold'), method, case.priority)
+    # Một cấp duyệt: phương án đã chốt là có hiệu lực ngay (không còn bước Cấp trên).
     return {**est.as_dict(), 'method': method, 'method_label': METHOD_LABELS[method], 'est_source_label': SOURCE_LABELS[est.source],
-            'needs_approval': bool(reasons), 'approval_reasons': reasons, 'deadline_at': case.deadline_at.isoformat() if case.deadline_at else None,
+            'needs_approval': False, 'approval_reasons': [], 'deadline_at': case.deadline_at.isoformat() if case.deadline_at else None,
             'threshold': format(get_decimal(db, 'approval_threshold'), '.0f')}
 
 
@@ -96,10 +96,10 @@ def apply_treatment(db, case, method, note, actor, request_id, actor_kind='nguoi
     t = Treatment(case_id=case.id, method=method, note=note, est_cost=Decimal(info['est_cost']) if info['est_cost'] is not None else None, est_source=info['est_source'],
                   est_sample_n=info['est_sample_n'], est_breakdown=info['breakdown'], deadline_at=case.deadline_at,
                   needs_approval=info['needs_approval'], approval_reasons=info['approval_reasons'],
-                  status='cho_duyet' if info['needs_approval'] else 'hieu_luc', decided_by=actor.id if actor else case.supervisor_id or case.created_by)
+                  status='hieu_luc', decided_by=actor.id if actor else case.supervisor_id or case.created_by)
     db.add(t)
     db.flush()
-    transition(db, case, 'chot_phuong_an', actor, request_id, note or None, needs_approval=info['needs_approval'], actor_kind=actor_kind,
+    transition(db, case, 'chot_phuong_an', actor, request_id, note or None, actor_kind=actor_kind,
                meta={'method': method, 'est_cost': info['est_cost'], 'est_source': info['est_source'], 'est_sample_n': info['est_sample_n'],
                      'approval_reasons': info['approval_reasons'], **(extra_meta or {})})
     return info
@@ -112,7 +112,7 @@ def get_estimate(case_id: UUID, method: Literal['sua', 'tai_che', 'huy', 'khac']
 
 @router.post('/defect-cases/{case_id}/treatment')
 def choose_treatment(case_id: UUID, data: TreatmentIn, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """'Chốt phương án': server tự tính lại chi phí và quyết định có cần cấp trên hay không."""
+    """'Chốt phương án': server tự tính lại chi phí; chuyển thẳng sang Đang xử lý."""
     get_case(db, user, case_id)
 
     def action():

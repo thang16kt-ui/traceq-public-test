@@ -45,6 +45,11 @@ def supervisors_for(db, case):
     return result
 
 
+def reviewers_for(db, case):
+    """Người duyệt: lỗi ưu tiên → Quản lý; lỗi thường → Giám sát (khi hệ thống không tự duyệt được)."""
+    return role_users(db, 'quan_ly') if case.priority else supervisors_for(db, case)
+
+
 def role_users(db, *roles):
     return [u for u in db.scalars(select(User).where(User.is_active, User.locked_at.is_(None))) if u.has(*roles)]
 
@@ -83,24 +88,31 @@ def on_transition(db, case, action, source, target, actor, actor_kind):
         if case.priority:
             notify(db, supervisors_for(db, case) + role_users(db, 'quan_ly'), 'uu_tien', f'LỖI ƯU TIÊN {case.code}', f'{text}. Cần xử lý ngay.', case,
                    dedupe_key=f'uu_tien:{case.id}', exclude=who)
-    elif action == 'gui_minh_chung':
-        notify(db, supervisors_for(db, case), 'can_duyet', f'Cần xác nhận lỗi {case.code}', f'{text}. Đã có minh chứng.', case, exclude=who)
     elif action == 'tu_choi':
-        notify(db, creator, 'bi_tu_choi', f'{case.code} bị từ chối', f'Giám sát yêu cầu chụp lại minh chứng. {text}', case, exclude=who)
-    elif action == 'chot_phuong_an' and target == 'cho_cap_tren':
-        type_ = 'uu_tien' if case.priority else 'can_duyet'
-        notify(db, role_users(db, 'cap_tren'), type_, f'Chờ phê duyệt {case.code}', f'{text}. Phương án cần cấp trên duyệt.', case, exclude=who)
+        by = 'Hệ thống' if actor_kind == 'tu_dong' else ('Quản lý' if case.priority else 'Giám sát')
+        notify(db, creator, 'bi_tu_choi', f'{case.code} bị trả lại', f'{by} yêu cầu bổ sung/chụp lại minh chứng. {text}', case, exclude=who)
     elif action == 'cap_tren_tu_choi':
-        notify(db, supervisors_for(db, case), 'bi_tu_choi', f'Cấp trên từ chối phương án {case.code}', f'Chọn lại phương án. {text}', case, exclude=who)
+        notify(db, reviewers_for(db, case), 'bi_tu_choi', f'Quản lý trả phương án {case.code}', f'Chọn lại phương án. {text}', case, exclude=who)
     elif action == 'phe_duyet':
         notify(db, supervisors_for(db, case), 'can_duyet', f'Đã phê duyệt {case.code}', f'Tiến hành xử lý. {text}', case, exclude=who)
     elif action == 'yeu_cau_lam_lai':
         notify(db, supervisors_for(db, case), 'bi_tu_choi', f'Yêu cầu làm lại {case.code}', text, case, exclude=who)
-    elif action == 'hoan_tat_xu_ly':
-        notify(db, supervisors_for(db, case), 'can_duyet', f'Chờ kiểm tra đóng {case.code}', text, case, exclude=who)
 
 
 AFTER_TRANSITION.append(on_transition)
+
+WAITING = {'cho_xac_nhan': 'Cần xác nhận lỗi', 'cho_phuong_an': 'Cần chọn phương án', 'cho_dong': 'Chờ kiểm tra đóng'}
+
+
+def on_waiting(db, case, action, source, target, actor, actor_kind):
+    """Báo người duyệt khi đề xuất dừng ở bước cần người. Đăng ký SAU móc tự động duyệt:
+    nếu hệ thống đã tự quyết (trạng thái đã đổi tiếp) thì không báo."""
+    if target not in WAITING or case.status != target:
+        return
+    text = describe(db, case)
+    type_ = 'uu_tien' if case.priority else 'can_duyet'
+    who = '(Quản lý duyệt lỗi ưu tiên)' if case.priority else '(hệ thống chưa tự duyệt được)'
+    notify(db, reviewers_for(db, case), type_, f'{WAITING[target]} {case.code}', f'{text} {who}', case, exclude=actor.id if actor else None)
 
 
 # ---------- Cron cảnh báo (scheduler) ----------

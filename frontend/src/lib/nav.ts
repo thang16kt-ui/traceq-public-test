@@ -1,5 +1,5 @@
 // Điều hướng theo vai trò (đặc tả mục 4).
-import { Bell, BookOpen, FilePlus, Bot, ClipboardCheck, ClipboardList, FileBarChart, History, LayoutDashboard, ListChecks, Package, QrCode, ScrollText, Server, Settings2, Tags, User, Users } from 'lucide-react';
+import { Bell, BookOpen, FilePlus, Bot, ClipboardCheck, ClipboardList, FileBarChart, LayoutDashboard, Package, QrCode, ScrollText, Server, Settings2, ShieldAlert, Tags, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem { path: string; label: string; icon: LucideIcon }
@@ -17,13 +17,15 @@ export const BOTTOM_NAV: Record<string, NavItem[]> = {
     { path: '/thong-bao', label: 'Thông báo', icon: Bell },
     { path: '/toi', label: 'Tôi', icon: User },
   ],
+  // Một cấp duyệt: Cấp trên không còn bước phê duyệt, chỉ theo dõi.
   cap_tren: [
-    { path: '/cho-phe-duyet', label: 'Chờ phê duyệt', icon: ListChecks },
-    { path: '/lich-su', label: 'Lịch sử', icon: History },
+    { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
+    { path: '/bao-cao', label: 'Báo cáo', icon: FileBarChart },
     { path: '/thong-bao', label: 'Thông báo', icon: Bell },
     { path: '/toi', label: 'Tôi', icon: User },
   ],
   quan_ly: [
+    { path: '/duyet-uu-tien', label: 'Duyệt ưu tiên', icon: ShieldAlert },
     { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
     { path: '/de-xuat', label: 'Đề xuất', icon: ClipboardList },
     { path: '/bao-cao', label: 'Báo cáo', icon: FileBarChart },
@@ -40,6 +42,7 @@ export const BOTTOM_NAV: Record<string, NavItem[]> = {
 // Thanh bên trái trên máy tính cho Quản lý/Admin.
 export const SIDEBAR: Record<string, NavItem[]> = {
   quan_ly: [
+    { path: '/duyet-uu-tien', label: 'Duyệt lỗi ưu tiên', icon: ShieldAlert },
     { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
     { path: '/de-xuat', label: 'Đề xuất', icon: ClipboardList },
     { path: '/tao', label: 'Tạo đề xuất', icon: FilePlus },
@@ -61,7 +64,7 @@ export const SIDEBAR: Record<string, NavItem[]> = {
 };
 
 export const HOME: Record<string, string> = {
-  nguoi_tao: '/viec-cua-toi', giam_sat: '/can-duyet', cap_tren: '/cho-phe-duyet', quan_ly: '/tong-quan', admin: '/nguoi-dung',
+  nguoi_tao: '/viec-cua-toi', giam_sat: '/can-duyet', cap_tren: '/tong-quan', quan_ly: '/duyet-uu-tien', admin: '/nguoi-dung',
 };
 
 export const EXTRA_LINKS: NavItem[] = [

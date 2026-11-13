@@ -43,7 +43,7 @@ export default function LevelSettings({ typeId, onClose, onSaved }: { typeId: st
     <div className={`priority-toggle ${value.priority_flag ? 'on' : ''}`}>
       <Checkbox checked={value.priority_flag} onChange={(e) => set({ priority_flag: e.target.checked })}
         label={<strong>Lỗi đặc biệt: luôn cảnh báo ưu tiên</strong>}
-        hint="Bật một lần ở đây thì MỌI mức bên trong (kể cả Nhẹ) đều gắn cờ: đẩy lên đầu danh sách, báo ngay giám sát + quản lý, luôn cần người duyệt (không bao giờ tự duyệt), lên cấp trên." />
+        hint="Bật một lần ở đây thì MỌI mức bên trong (kể cả Nhẹ) đều gắn cờ: đẩy lên đầu danh sách, báo ngay Quản lý; Quản lý trực tiếp duyệt (không bao giờ tự duyệt)." />
     </div>
     <Segmented label="Cách tính chi phí ước tính" value={value.cost_mode} onChange={(v) => set({ cost_mode: v })}
       options={Object.entries(COST_MODE_LABELS).map(([k, label]) => ({ value: k, label }))} />

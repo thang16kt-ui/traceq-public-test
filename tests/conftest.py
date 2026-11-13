@@ -146,6 +146,28 @@ def submit_evidence(client, case_id):
     return client.post(f'/api/v1/defect-cases/{case_id}/evidence/submit', json=body, headers={'Idempotency-Key': str(uuid.uuid4())})
 
 
+def good_jpeg():
+    """Ảnh đủ sáng, rõ nét (đạt kiểm tra chất lượng ảnh)."""
+    import io
+    from PIL import Image, ImageDraw
+    img = Image.new('RGB', (320, 240), (200, 200, 200))
+    draw = ImageDraw.Draw(img)
+    for x in range(0, 320, 8):
+        draw.line([(x, 0), (x, 240)], fill=(0, 0, 0), width=2)
+    out = io.BytesIO(); img.save(out, format='JPEG'); return out.getvalue()
+
+
+def submit_with_photos(client, case_id):
+    """Gửi minh chứng ĐỦ ẢNH (mỗi mục lỗi một ảnh tốt) – điều kiện để lỗi thường được tự động duyệt."""
+    detail = client.get(f'/api/v1/defect-cases/{case_id}').json()
+    for item in detail['items']:
+        r = client.post(f"/api/v1/defect-cases/{case_id}/items/{item['id']}/photos", files={'file': ('a.jpg', good_jpeg(), 'image/jpeg')},
+                        headers={'Idempotency-Key': str(uuid.uuid4())})
+        assert r.status_code == 201, r.text
+    version = client.get(f'/api/v1/defect-cases/{case_id}').json()['row_version']
+    return client.post(f'/api/v1/defect-cases/{case_id}/evidence/submit', json={'row_version': version}, headers={'Idempotency-Key': str(uuid.uuid4())})
+
+
 @pytest.fixture
 def confirm(clients):
     """Đưa đề xuất tới bước 'Xác nhận lỗi' (sản phẩm được tính là lỗi). Trả phản hồi của bước xác nhận."""

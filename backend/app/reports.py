@@ -191,7 +191,8 @@ def render_pdf(data, code, exported_by, params):
         story.append(p(('ĐANG TẠM DỪNG TOÀN BỘ. ' if a['kill_switch'] else '') +
                        f"Chỉ tự động khi độ tin cậy ≥ {round(a['confidence_threshold'] * 100)}% và bước đó đạt ≥ {a['min_reviews']} lượt duyệt ở chế độ Chỉ gợi ý "
                        f"với đồng thuận ≥ {round(a['target_agreement'] * 100)}%. Kiểm tra mẫu {round(a['sample_rate'] * 100)}% quyết định tự động; "
-                       f"đảo ngược được trong {a['reverse_hours']} giờ. Luôn do người duyệt: lỗi ưu tiên, mức Nặng, phương án Hủy, chi phí vượt ngưỡng.", 'small'))
+                       f"đảo ngược được trong {a['reverse_hours']} giờ. Một cấp duyệt: lỗi ưu tiên do Quản lý duyệt; thiếu ảnh → trả người tạo; "
+                       f"Hủy, vượt ngưỡng chi phí, độ tin cậy thấp → Giám sát duyệt.", 'small'))
         story.append(table([['Bước', 'Chế độ', 'Quyết định', 'Tự động', 'Phút duyệt (người / tự động)', 'Đồng thuận gợi ý', 'Kiểm tra mẫu (sai)', 'Đảo ngược']] +
                            [[s['label'], s['mode'], str(s['total']), f"{s['auto']} ({s['auto_rate']}%)" if s['auto_rate'] is not None else '—',
                              f"{s['human_minutes'] if s['human_minutes'] is not None else '—'} / {s['auto_minutes'] if s['auto_minutes'] is not None else '—'}",

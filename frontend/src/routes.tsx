@@ -34,7 +34,7 @@ function NotFound() {
 
 function Forbidden() {
   return <div className="page"><Empty title="Vai trò hiện tại không dùng được màn hình này">
-    Tạo đề xuất cần vai trò Người tạo hoặc Quản lý; duyệt cần Giám sát/Cấp trên. Nếu tài khoản có nhiều vai trò, đổi “Chế độ làm việc” ở thanh trên.
+    Tạo đề xuất cần vai trò Người tạo hoặc Quản lý; duyệt lỗi thường cần Giám sát, lỗi ưu tiên cần Quản lý. Nếu tài khoản có nhiều vai trò, đổi “Chế độ làm việc” ở thanh trên.
     Nếu chưa có vai trò cần thiết, nhờ Admin thêm ở màn Người dùng.</Empty></div>;
 }
 
@@ -48,9 +48,8 @@ export const ROUTES: Record<string, Entry> = {
   'thiet-lap': { roles: MANAGERS, render: () => <SetupHub /> },
   'nhat-ky': { roles: MANAGERS, render: () => <AuditLog /> },
   'viec-cua-toi': { roles: ['nguoi_tao', 'quan_ly'], render: () => <ProposalList title="Việc của tôi" subtitle="Đề xuất do bạn tạo" view="mine" canCreate extraFilters={[{ value: 'nhap', label: 'Nháp' }]} /> },
-  'can-duyet': { roles: ['giam_sat', 'quan_ly'], render: () => <ProposalList title="Cần duyệt" subtitle="Đề xuất của sản phẩm bạn giám sát" view="review" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /> },
-  'cho-phe-duyet': { roles: ['cap_tren'], render: () => <ProposalList title="Chờ phê duyệt" subtitle="Đề xuất cần cấp trên duyệt (chi phí vượt ngưỡng, Hủy, hoặc lỗi ưu tiên)" view="approve" /> },
-  'lich-su': { roles: ['cap_tren'], render: () => <ProposalList title="Lịch sử" subtitle="Đề xuất đã qua bước cấp trên" view="approved" extraFilters={[{ value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'da_dong', label: 'Đã đóng' }]} /> },
+  'can-duyet': { roles: ['giam_sat', 'quan_ly'], render: () => <ProposalList title="Cần duyệt" subtitle="Lỗi thường hệ thống chưa tự duyệt được (Hủy, vượt ngưỡng, độ tin cậy thấp…) và đề xuất đang xử lý. Lỗi ưu tiên do Quản lý duyệt." view="review" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /> },
+  'duyet-uu-tien': { roles: ['quan_ly'], render: () => <ProposalList title="Duyệt lỗi ưu tiên" subtitle="Một cấp duyệt: lỗi ưu tiên do Quản lý xác nhận, chốt phương án và đóng. Lỗi thường hệ thống tự duyệt khi đủ ảnh." view="manager" extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }]} /> },
   'tao': { roles: ['nguoi_tao', 'quan_ly'], render: (r) => <Create key={r.parts[1] || 'new'} editId={r.parts[1]} token={r.params.get('qr') || r.params.get('serial') || undefined} /> },
   'thong-bao': { render: () => <Notifications /> },
   'tra-cuu': { render: () => <Search /> },
@@ -62,7 +61,7 @@ export const ROUTES: Record<string, Entry> = {
   'de-xuat': { render: (r, session) => {
     const [, id, sub] = r.parts;
     if (!id) return hasRole(session.user, ...MANAGERS) ? <ProposalList title="Đề xuất" view="all" canCreate={hasRole(session.user, 'quan_ly')}
-      extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'cho_cap_tren', label: 'Chờ cấp trên' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }, { value: 'da_dong', label: 'Đã đóng' }]} /> : <Forbidden />;
+      extraFilters={[{ value: 'cho_phuong_an', label: 'Chờ chọn phương án' }, { value: 'dang_xu_ly', label: 'Đang xử lý' }, { value: 'cho_dong', label: 'Chờ kiểm tra đóng' }, { value: 'da_dong', label: 'Đã đóng' }]} /> : <Forbidden />;
     if (sub === 'tong-quan') return <Sheet id={id} />;
     if (sub === 'da-gui') return <AfterSubmit id={id} />;
     if (sub === 'minh-chung') return <Evidence id={id} />;
