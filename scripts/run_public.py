@@ -49,6 +49,9 @@ def main():
             seed_demo('DEMO_PASSWORD')
         else:
             demo_accounts_only('DEMO_PASSWORD')
+        if os.getenv('SAMPLE_DATA', '').lower() == 'pcba':
+            from backend.app.cli import seed_sample
+            seed_sample(int(os.getenv('SAMPLE_DATA_TOTAL', '1000')))
     commands = [
         [sys.executable, '-m', 'uvicorn', 'scripts.serve_local:app', '--host', '0.0.0.0', '--port', str(port), '--no-access-log',
          # Render/Railway đứng sau proxy HTTPS: lấy IP thật từ X-Forwarded-For để giới hạn đăng nhập theo người.

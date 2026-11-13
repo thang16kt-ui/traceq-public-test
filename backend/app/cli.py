@@ -184,6 +184,20 @@ def demo_accounts_only(password_env):
             case.supervisor_id=accounts['demo.giamsat'].id; case.supervisor_name_snapshot=accounts['demo.giamsat'].display_name
         db.commit()
 
+def seed_sample(total=1000):
+    """DỮ LIỆU MẪU PCBA: chỉ ENVIRONMENT=demo, DB hậu tố _demo/_test; chạy lại không nạp trùng."""
+    from sqlalchemy.engine import make_url
+    from .sample_data import seed_pcba
+    database=make_url(DATABASE_URL).database or ''
+    if ENVIRONMENT!='demo' or not (database.endswith('_demo') or database.endswith('_test')):
+        raise SystemExit('Chỉ nạp dữ liệu mẫu khi ENVIRONMENT=demo và database có hậu tố _demo/_test')
+    with SessionLocal() as db:
+        advisory_lock(db,'seed-sample')
+        if not db.scalar(select(User.id).where(User.username=='demo.giamsat')):
+            raise SystemExit('Cần tài khoản mẫu (chạy seed-demo trước)')
+        created=seed_pcba(db,total); db.commit()
+    print(f'DỮ LIỆU MẪU PCBA: đã nạp {created} đề xuất' if created else 'DỮ LIỆU MẪU PCBA đã có, bỏ qua')
+
 def generate_vapid():
     import base64
     from cryptography.hazmat.primitives import serialization
@@ -201,10 +215,12 @@ def main():
     p=sub.add_parser('seed-demo'); p.add_argument('--password-env',default='DEMO_PASSWORD')
     p=sub.add_parser('backup',help='Sao lưu logic DB + ảnh/báo cáo (kèm mã băm)'); p.add_argument('--out')
     p=sub.add_parser('restore-drill',help='Khôi phục bản sao vào schema tạm và đối chiếu'); p.add_argument('path')
+    p=sub.add_parser('seed-sample',help='DỮ LIỆU MẪU ~1000 đề xuất cho sản phẩm PCBA (chỉ demo)'); p.add_argument('--total',type=int,default=1000)
     sub.add_parser('generate-vapid',help='Sinh cặp khóa Web Push (đặt vào VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY, giữ bí mật khóa riêng)')
     args=parser.parse_args()
     if args.command=='migrate': migrate()
     elif args.command=='generate-vapid': generate_vapid()
+    elif args.command=='seed-sample': seed_sample(args.total)
     elif args.command=='backup':
         from .backup import create_backup
         path,manifest=create_backup(engine,args.out); print(f'Đã sao lưu {sum(t["rows"] for t in manifest["tables"].values())} dòng vào {path}')
