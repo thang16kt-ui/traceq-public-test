@@ -1,6 +1,6 @@
 """Báo cáo in/PDF/Excel cho khách hàng và kiểm toán (đặc tả GĐ4-20).
 
-Có mã BC-xxxx, người xuất, giờ xuất, KPI, Pareto, bảng đề xuất, mã băm ảnh minh chứng, chỗ ký
+Có mã BC-xxxx, người xuất, giờ xuất, KPI, Pareto, tự động duyệt (số đo thực tế trong kỳ), bảng đề xuất, mã băm ảnh minh chứng, chỗ ký
 "Người lập" / "Quản lý xác nhận"; tùy chọn bộ ảnh theo đề xuất. Mọi lần xuất ghi report_exports + audit_log.
 Gửi định kỳ qua email (SMTP) cho Quản lý; chưa cấu hình SMTP thì báo trong app.
 """
@@ -26,8 +26,8 @@ from .auth import REPORT_VIEWERS, ApiError, current_user, require_role
 from .dashboard import build_dashboard, safe_cell
 from .db import get_db
 from .filestore import store
-from .models import (LEVEL_LABELS, METHOD_LABELS, Attachment, Batch, CaseDefect, CostActual, DefectCase, ProductType, ReportExport, Treatment,
-                     Unit, User, now, report_code_seq, uid)
+from .models import (LEVEL_LABELS, METHOD_LABELS, Attachment, AutoCheck, Batch, CaseDefect, CostActual, Decision, DefectCase, ProductType, ReportExport,
+                     Treatment, Unit, User, now, report_code_seq, uid)
 from .services import audit
 from .workflow import STATUS_LABELS
 
@@ -36,6 +36,8 @@ VN = ZoneInfo('Asia/Ho_Chi_Minh')
 log = logging.getLogger('quality')
 MAX_PROPOSALS = 2000
 MAX_PHOTOS = 200
+DEFAULT_SECTIONS = ['kpi', 'pareto', 'tu_dong', 'de_xuat', 'ma_bam']
+MODE_LABELS = {'tat': 'Tắt', 'goi_y': 'Chỉ gợi ý', 'tu_dong': 'Tự động'}
 
 
 class ReportIn(BaseModel):
@@ -44,7 +46,7 @@ class ReportIn(BaseModel):
     date_to: date
     product_type_id: UUID | None = None
     format: Literal['pdf', 'xlsx'] = 'pdf'
-    sections: list[Literal['kpi', 'pareto', 'de_xuat', 'ma_bam', 'anh']] = Field(default_factory=lambda: ['kpi', 'pareto', 'de_xuat', 'ma_bam'])
+    sections: list[Literal['kpi', 'pareto', 'tu_dong', 'de_xuat', 'ma_bam', 'anh']] = Field(default_factory=lambda: list(DEFAULT_SECTIONS))
 
     @model_validator(mode='after')
     def period(self):
@@ -64,6 +66,7 @@ def report_data(db, params):
         stmt = stmt.where(DefectCase.unit_id.in_(select(Unit.id).join(Batch, Batch.id == Unit.batch_id).where(Batch.product_type_id == str(params['product_type_id']))))
     cases = db.scalars(stmt.order_by(DefectCase.created_at).limit(MAX_PROPOSALS)).all()
     rows, evidence = [], []
+    auto_cases = set(db.scalars(select(Decision.case_id).where(Decision.actor_kind == 'tu_dong', Decision.case_id.in_([c.id for c in cases])))) if cases else set()
     for c in cases:
         unit = db.get(Unit, c.unit_id)
         product = db.get(ProductType, db.get(Batch, unit.batch_id).product_type_id)
@@ -72,7 +75,7 @@ def report_data(db, params):
         actual = db.scalar(select(func.sum(CostActual.total)).where(CostActual.case_id == c.id))
         rows.append({'code': c.code, 'created_at': c.created_at, 'status': STATUS_LABELS[c.status], 'product': product.name, 'serial': unit.serial_number,
                      'items': '; '.join(f'{i.defect_type_name_snapshot} × {i.occurrence_count} ({LEVEL_LABELS[i.level]})' for i in items),
-                     'priority': c.priority, 'method': METHOD_LABELS.get(t.method) if t else '', 'est': t.est_cost if t else None, 'actual': actual})
+                     'priority': c.priority, 'auto': c.id in auto_cases, 'method': METHOD_LABELS.get(t.method) if t else '', 'est': t.est_cost if t else None, 'actual': actual})
         for a in db.scalars(select(Attachment).where(Attachment.case_id == c.id).order_by(Attachment.created_at)):
             item = next((i for i in items if i.id == a.case_defect_id), None)
             evidence.append({'code': c.code, 'item': item.defect_type_name_snapshot if item else '—', 'kind': 'Trước xử lý' if a.kind == 'truoc' else 'Sau xử lý',
@@ -81,7 +84,48 @@ def report_data(db, params):
     if params.get('product_type_id'):
         chosen = db.get(ProductType, str(params['product_type_id']))
         scope_name = f'{chosen.name} ({chosen.sku})' if chosen else 'Sản phẩm đã chọn'
-    return {'dashboard': dash, 'proposals': rows, 'evidence': evidence, 'truncated': len(cases) >= MAX_PROPOSALS, 'scope_name': scope_name}
+    return {'dashboard': dash, 'proposals': rows, 'evidence': evidence, 'truncated': len(cases) >= MAX_PROPOSALS, 'scope_name': scope_name,
+            'auto': auto_summary(db, start, end, params.get('product_type_id'))}
+
+
+def auto_summary(db, start, end, product_type_id=None):
+    """Tự động duyệt trong kỳ: chỉ số đo thực tế theo bước và theo tuần (thấy lộ trình Tắt → Chỉ gợi ý → Tự động)."""
+    from .auto import STEPS, config, gate
+    cfg = config(db)
+    stmt = select(Decision).where(Decision.at >= start, Decision.at < end, Decision.step.in_(list(STEPS)), Decision.action != 'kiem_tra_mau_sai')
+    if product_type_id:
+        stmt = stmt.where(Decision.case_id.in_(select(DefectCase.id).join(Unit, Unit.id == DefectCase.unit_id).join(Batch, Batch.id == Unit.batch_id)
+                                               .where(Batch.product_type_id == str(product_type_id))))
+    decisions = db.scalars(stmt).all()
+    ids = [d.id for d in decisions if d.actor_kind == 'tu_dong']
+    checks = db.scalars(select(AutoCheck).where(AutoCheck.decision_id.in_(ids))).all() if ids else []
+
+    def minutes(rows):
+        values = [(d.at - d.entered_at).total_seconds() / 60 for d in rows if d.entered_at]
+        return round(sum(values) / len(values)) if values else None
+    steps = []
+    for step, label in STEPS.items():
+        rows = [d for d in decisions if d.step == step]
+        auto = [d for d in rows if d.actor_kind == 'tu_dong']
+        human = [d for d in rows if d.actor_kind == 'nguoi']
+        g = gate(db, step, cfg)
+        mine = [c for c in checks if c.step == step and c.result]
+        steps.append({'step': step, 'label': label, 'mode': MODE_LABELS[cfg['steps'][step]['mode']], 'total': len(rows), 'auto': len(auto),
+                      'auto_rate': round(len(auto) / len(rows) * 100, 1) if rows else None, 'human_minutes': minutes(human), 'auto_minutes': minutes(auto),
+                      'agreement': round(g['agreement'] * 100, 1) if g['agreement'] is not None else None, 'reviews': g['reviews'], 'ready': g['ready'],
+                      'reversed': sum(1 for d in auto if d.reversed_at), 'checked': len(mine), 'wrong': sum(1 for c in mine if c.result == 'sai'),
+                      'pending': sum(1 for c in checks if c.step == step and not c.result)})
+    weekly = {}
+    for d in decisions:
+        day = d.at.astimezone(VN).date()
+        week = weekly.setdefault(day - timedelta(days=day.weekday()), {'total': 0, 'auto': 0, 'suggested': 0})
+        week['total'] += 1
+        week['auto'] += d.actor_kind == 'tu_dong'
+        week['suggested'] += d.actor_kind == 'nguoi' and d.agreed is not None
+    return {'kill_switch': cfg['kill_switch'], 'confidence_threshold': cfg['confidence_threshold'], 'min_reviews': cfg['min_reviews'],
+            'target_agreement': cfg['target_agreement'], 'sample_rate': cfg['sample_rate'], 'reverse_hours': cfg['reverse_hours'], 'steps': steps,
+            'weekly': [{'week': w, **v, 'auto_rate': round(v['auto'] / v['total'] * 100, 1) if v['total'] else None,
+                        'phase': 'Tự động' if v['auto'] else ('Chỉ gợi ý' if v['suggested'] else 'Tắt')} for w, v in sorted(weekly.items())]}
 
 
 def vn(t):
@@ -123,12 +167,32 @@ def render_pdf(data, code, exported_by, params):
             story += [chart, table([['Loại lỗi', 'Chi phí', 'Lũy kế']] + [[r['name'], money(r['cost']), f"{r['cumulative_pct']}%"] for r in rows], (90 * mm, 50 * mm, 40 * mm))]
         else:
             story.append(p('Chưa có chi phí thực tế trong kỳ.'))
+    if 'tu_dong' in sections and data.get('auto'):
+        a = data['auto']
+        story.append(p('Tự động duyệt (số đo thực tế trong kỳ)', 'h2'))
+        story.append(p(('ĐANG TẠM DỪNG TOÀN BỘ. ' if a['kill_switch'] else '') +
+                       f"Chỉ tự động khi độ tin cậy ≥ {round(a['confidence_threshold'] * 100)}% và bước đó đạt ≥ {a['min_reviews']} lượt duyệt ở chế độ Chỉ gợi ý "
+                       f"với đồng thuận ≥ {round(a['target_agreement'] * 100)}%. Kiểm tra mẫu {round(a['sample_rate'] * 100)}% quyết định tự động; "
+                       f"đảo ngược được trong {a['reverse_hours']} giờ. Luôn do người duyệt: lỗi ưu tiên, mức Nặng, phương án Hủy, chi phí vượt ngưỡng.", 'small'))
+        story.append(table([['Bước', 'Chế độ', 'Quyết định', 'Tự động', 'Phút duyệt (người / tự động)', 'Đồng thuận gợi ý', 'Kiểm tra mẫu (sai)', 'Đảo ngược']] +
+                           [[s['label'], s['mode'], str(s['total']), f"{s['auto']} ({s['auto_rate']}%)" if s['auto_rate'] is not None else '—',
+                             f"{s['human_minutes'] if s['human_minutes'] is not None else '—'} / {s['auto_minutes'] if s['auto_minutes'] is not None else '—'}",
+                             (f"{s['agreement']}% · {s['reviews']} lượt" + (' · đạt' if s['ready'] else ' · chưa đạt')) if s['agreement'] is not None else 'Chưa đo',
+                             f"{s['checked']} ({s['wrong']})" + (f" · chờ {s['pending']}" if s['pending'] else ''), str(s['reversed'])] for s in a['steps']],
+                           (26 * mm, 18 * mm, 18 * mm, 20 * mm, 26 * mm, 30 * mm, 24 * mm, 18 * mm)))
+        if a['weekly']:
+            story += [Spacer(1, 4), p('Theo tuần: tỷ lệ quyết định do hệ thống tự động duyệt', 'small')]
+            story.append(table([['Tuần bắt đầu', 'Giai đoạn', 'Quyết định', 'Tự động', 'Tỷ lệ']] +
+                               [[w['week'].strftime('%d/%m/%Y'), w['phase'], str(w['total']), str(w['auto']), f"{w['auto_rate']}%" if w['auto_rate'] is not None else '—']
+                                for w in a['weekly']], (36 * mm, 36 * mm, 36 * mm, 36 * mm, 36 * mm)))
     if 'de_xuat' in sections:
         story.append(p(f"Bảng đề xuất ({len(data['proposals'])}{'+, đã cắt bớt' if data['truncated'] else ''})", 'h2'))
         story.append(table([['Mã', 'Ngày tạo', 'Sản phẩm / serial', 'Mục lỗi', 'Trạng thái', 'Phương án', 'Ước tính', 'Thực tế']] +
-                           [[r['code'] + (' (ƯT)' if r['priority'] else ''), vn(r['created_at']), f"{r['product']}\n{r['serial']}", r['items'], r['status'], r['method'] or '—',
+                           [[r['code'] + (' (ƯT)' if r['priority'] else '') + (' (TĐ)' if r.get('auto') else ''), vn(r['created_at']), f"{r['product']}\n{r['serial']}", r['items'], r['status'], r['method'] or '—',
                              money(r['est']), money(r['actual'])] for r in data['proposals']],
                            (16 * mm, 20 * mm, 30 * mm, 42 * mm, 20 * mm, 14 * mm, 19 * mm, 19 * mm)) if data['proposals'] else p('Không có đề xuất trong kỳ.'))
+        if data['proposals']:
+            story.append(p('(ƯT) = có lỗi ưu tiên · (TĐ) = có bước do hệ thống tự động duyệt', 'small'))
     if 'ma_bam' in sections:
         story.append(p('Mã băm ảnh minh chứng (SHA-256)', 'h2'))
         story.append(p('Đối chiếu: tính SHA-256 của tệp ảnh lưu trên hệ thống phải trùng mã dưới đây. Ảnh là bất biến (không sửa/xóa được).', 'small'))
@@ -168,10 +232,22 @@ def render_xlsx(data, code, exported_by, params):
     pareto.append(['Loại lỗi', 'Chi phí (VND)', 'Lũy kế (%)'])
     for r in d['pareto']:
         pareto.append([safe_cell(r['name']), r['cost'], r['cumulative_pct']])
+    if data.get('auto'):
+        auto = wb.create_sheet('Tu dong duyet')
+        auto.append(['Bước', 'Chế độ', 'Quyết định', 'Tự động', 'Tỷ lệ tự động (%)', 'Phút duyệt (người)', 'Phút duyệt (tự động)', 'Đồng thuận gợi ý (%)',
+                     'Lượt đo', 'Kiểm tra mẫu', 'Sai', 'Đảo ngược'])
+        for s in data['auto']['steps']:
+            auto.append([s['label'], s['mode'], s['total'], s['auto'], s['auto_rate'], s['human_minutes'], s['auto_minutes'], s['agreement'], s['reviews'],
+                         s['checked'], s['wrong'], s['reversed']])
+        auto.append([])
+        auto.append(['Tuần bắt đầu', 'Giai đoạn', 'Quyết định', 'Tự động', 'Tỷ lệ (%)'])
+        for w in data['auto']['weekly']:
+            auto.append([w['week'].strftime('%d/%m/%Y'), w['phase'], w['total'], w['auto'], w['auto_rate']])
     sheet = wb.create_sheet('De xuat')
-    sheet.append(['Mã', 'Ngày tạo', 'Sản phẩm', 'Serial', 'Mục lỗi', 'Ưu tiên', 'Trạng thái', 'Phương án', 'Ước tính (VND)', 'Thực tế (VND)'])
+    sheet.append(['Mã', 'Ngày tạo', 'Sản phẩm', 'Serial', 'Mục lỗi', 'Ưu tiên', 'Tự động duyệt', 'Trạng thái', 'Phương án', 'Ước tính (VND)', 'Thực tế (VND)'])
     for r in data['proposals']:
-        sheet.append([r['code'], vn(r['created_at']), safe_cell(r['product']), safe_cell(r['serial']), safe_cell(r['items']), 'Có' if r['priority'] else '', r['status'],
+        sheet.append([r['code'], vn(r['created_at']), safe_cell(r['product']), safe_cell(r['serial']), safe_cell(r['items']), 'Có' if r['priority'] else '',
+                      'Có' if r.get('auto') else '', r['status'],
                       r['method'], float(r['est']) if r['est'] is not None else None, float(r['actual']) if r['actual'] is not None else None])
     hashes = wb.create_sheet('Ma bam minh chung')
     hashes.append(['Đề xuất', 'Mục lỗi', 'Loại', 'Thời điểm chụp', 'SHA-256'])
@@ -289,7 +365,7 @@ def scheduled_reports(db, moment=None):
     if not period or db.scalar(select(ReportExport.id).where(ReportExport.kind == 'dinh_ky', ReportExport.period_key == period[0])):
         return 0
     key, start, end = period
-    params = {'date_from': start, 'date_to': end, 'product_type_id': None, 'format': 'pdf', 'sections': ['kpi', 'pareto', 'de_xuat', 'ma_bam']}
+    params = {'date_from': start, 'date_to': end, 'product_type_id': None, 'format': 'pdf', 'sections': list(DEFAULT_SECTIONS)}
     record, content = create_report(db, params, None, 'dinh_ky', key)
     recipients = setting.get('recipients') or []
     if smtp_configured() and recipients:

@@ -53,6 +53,12 @@ def test_pcba_sample_is_consistent_and_idempotent(clients, seed):
     report = manager.post('/api/v1/reports', json={'date_from': (now() - timedelta(weeks=7)).date().isoformat(), 'date_to': (now() + timedelta(days=1)).date().isoformat()},
                           headers={'Idempotency-Key': str(uuid.uuid4())})
     assert report.status_code == 201, report.text
+    with SessionLocal() as db:  # báo cáo có mục Tự động duyệt: thấy đủ lộ trình theo tuần
+        from backend.app.reports import report_data
+        data = report_data(db, {'date_from': (now() - timedelta(weeks=7)).date(), 'date_to': now().date(), 'product_type_id': None})
+        phases = [w['phase'] for w in data['auto']['weekly']]
+        assert 'Tắt' in phases and 'Chỉ gợi ý' in phases and 'Tự động' in phases
+        assert any(r['auto'] for r in data['proposals'])
     auto_stats = manager.get('/api/v1/auto-approval/stats', params={'days': 60}).json()
     assert auto_stats['steps']['xac_nhan']['mode'] == 'tu_dong' and auto_stats['steps']['xac_nhan']['auto'] > 0
     assert auto_stats['steps']['phuong_an']['mode'] == 'goi_y' and auto_stats['steps']['phuong_an']['auto'] == 0
