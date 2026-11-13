@@ -70,18 +70,32 @@ def case_filters(product_type_id, defect_type_id):
 
 
 def cost_by_type(db, case_ids_with_totals):
-    """Phân bổ tổng chi phí thực tế mỗi đề xuất cho các mục lỗi (giá thị trường × số vị trí)."""
+    """Phân bổ tổng chi phí thực tế mỗi đề xuất cho các mục lỗi (giá thị trường × số vị trí).
+
+    Nạp mục lỗi theo lô và nhớ giá theo (mức, ngày): kỳ dài nhiều đề xuất không truy vấn từng dòng."""
+    rows = list(case_ids_with_totals)
+    items_by, levels, prices = {}, {}, {}
+    ids = list({case_id for case_id, _, _ in rows})
+    for chunk in (ids[i:i + 500] for i in range(0, len(ids), 500)):
+        for item in db.scalars(select(CaseDefect).where(CaseDefect.case_id.in_(chunk)).order_by(CaseDefect.created_at, CaseDefect.id)):
+            items_by.setdefault(item.case_id, []).append(item)
+    level_ids = list({i.level_id for items in items_by.values() for i in items if i.level_id})
+    if level_ids:
+        levels = {lv.id: lv for lv in db.scalars(select(DefectLevel).where(DefectLevel.id.in_(level_ids)))}
+
+    def price(level_id, day):
+        if (level_id, day) not in prices:
+            level = levels.get(level_id)
+            prices[(level_id, day)] = price_on(db, level, day)[0] if level else None
+        return prices[(level_id, day)]
     totals = {}
-    for case_id, total, at in case_ids_with_totals:
-        items = db.scalars(select(CaseDefect).where(CaseDefect.case_id == case_id)).all()
-        priced = []
+    for case_id, total, at in rows:
+        items = items_by.get(case_id, [])
+        priced = [(item.id, item.occurrence_count, price(item.level_id, at.date()) if item.level_id else None) for item in items]
+        shares = allocate(Decimal(total), priced) if items else {}
         for item in items:
-            level = db.get(DefectLevel, item.level_id) if item.level_id else None
-            priced.append((item.id, item.occurrence_count, price_on(db, level, at.date())[0] if level else None))
-        for item in items:
-            share = allocate(Decimal(total), priced)[item.id]
             key = (item.defect_type_id, item.defect_type_name_snapshot)
-            totals[key] = totals.get(key, Decimal('0')) + share
+            totals[key] = totals.get(key, Decimal('0')) + shares[item.id]
     return totals
 
 
