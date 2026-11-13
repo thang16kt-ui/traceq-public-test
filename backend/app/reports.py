@@ -66,17 +66,35 @@ def report_data(db, params):
         stmt = stmt.where(DefectCase.unit_id.in_(select(Unit.id).join(Batch, Batch.id == Unit.batch_id).where(Batch.product_type_id == str(params['product_type_id']))))
     cases = db.scalars(stmt.order_by(DefectCase.created_at).limit(MAX_PROPOSALS)).all()
     rows, evidence = [], []
-    auto_cases = set(db.scalars(select(Decision.case_id).where(Decision.actor_kind == 'tu_dong', Decision.case_id.in_([c.id for c in cases])))) if cases else set()
+    # Nạp theo lô (không truy vấn từng đề xuất): kỳ dài ~1000 đề xuất vẫn xuất nhanh trên máy chủ nhỏ.
+    ids = [c.id for c in cases]
+    auto_cases, units, batches, products, items_by, latest, actuals, photos = set(), {}, {}, {}, {}, {}, {}, {}
+    for chunk in (ids[i:i + 500] for i in range(0, len(ids), 500)):
+        auto_cases |= set(db.scalars(select(Decision.case_id).where(Decision.actor_kind == 'tu_dong', Decision.case_id.in_(chunk))))
+        for i in db.scalars(select(CaseDefect).where(CaseDefect.case_id.in_(chunk)).order_by(CaseDefect.created_at, CaseDefect.id)):
+            items_by.setdefault(i.case_id, []).append(i)
+        for t in db.scalars(select(Treatment).where(Treatment.case_id.in_(chunk)).order_by(Treatment.decided_at)):
+            latest[t.case_id] = t  # bản ghi sau cùng = phương án mới nhất
+        actuals.update(db.execute(select(CostActual.case_id, func.sum(CostActual.total)).where(CostActual.case_id.in_(chunk)).group_by(CostActual.case_id)).all())
+        for a in db.scalars(select(Attachment).where(Attachment.case_id.in_(chunk)).order_by(Attachment.created_at)):
+            photos.setdefault(a.case_id, []).append(a)
+    unit_ids = list({c.unit_id for c in cases})
+    for chunk in (unit_ids[i:i + 500] for i in range(0, len(unit_ids), 500)):
+        units.update({u.id: u for u in db.scalars(select(Unit).where(Unit.id.in_(chunk)))})
+    batch_ids = list({u.batch_id for u in units.values()})
+    if batch_ids:
+        batches.update({b.id: b for b in db.scalars(select(Batch).where(Batch.id.in_(batch_ids)))})
+        products.update({x.id: x for x in db.scalars(select(ProductType).where(ProductType.id.in_({b.product_type_id for b in batches.values()})))})
     for c in cases:
-        unit = db.get(Unit, c.unit_id)
-        product = db.get(ProductType, db.get(Batch, unit.batch_id).product_type_id)
-        items = db.scalars(select(CaseDefect).where(CaseDefect.case_id == c.id)).all()
-        t = db.scalar(select(Treatment).where(Treatment.case_id == c.id).order_by(Treatment.decided_at.desc()).limit(1))
-        actual = db.scalar(select(func.sum(CostActual.total)).where(CostActual.case_id == c.id))
+        unit = units[c.unit_id]
+        product = products[batches[unit.batch_id].product_type_id]
+        items = items_by.get(c.id, [])
+        t = latest.get(c.id)
+        actual = actuals.get(c.id)
         rows.append({'code': c.code, 'created_at': c.created_at, 'status': STATUS_LABELS[c.status], 'product': product.name, 'serial': unit.serial_number,
                      'items': '; '.join(f'{i.defect_type_name_snapshot} × {i.occurrence_count} ({LEVEL_LABELS[i.level]})' for i in items),
                      'priority': c.priority, 'auto': c.id in auto_cases, 'method': METHOD_LABELS.get(t.method) if t else '', 'est': t.est_cost if t else None, 'actual': actual})
-        for a in db.scalars(select(Attachment).where(Attachment.case_id == c.id).order_by(Attachment.created_at)):
+        for a in photos.get(c.id, []):
             item = next((i for i in items if i.id == a.case_defect_id), None)
             evidence.append({'code': c.code, 'item': item.defect_type_name_snapshot if item else '—', 'kind': 'Trước xử lý' if a.kind == 'truoc' else 'Sau xử lý',
                              'taken_at': a.taken_at or a.created_at, 'sha256': a.sha256, 'storage_key': a.storage_key, 'case_id': c.id})
