@@ -35,14 +35,19 @@ def test_pcba_sample_is_consistent_and_idempotent(clients, seed):
         assert db.scalar(select(func.count()).select_from(Treatment)) > 0
         # Tự động duyệt: có quyết định tự động (không có người), có gợi ý chạy ngầm, có kiểm tra mẫu
         autos = db.scalars(select(Decision).where(Decision.actor_kind == 'tu_dong')).all()
-        assert autos and all(d.actor_id is None and d.confidence >= 0.9 and d.reversible_until for d in autos)
+        approvals = [d for d in autos if d.action != 'tu_choi']  # tu_choi tự động = trả người tạo bổ sung ảnh (không đảo ngược)
+        assert approvals and all(d.actor_id is None and d.confidence >= 0.9 and d.reversible_until for d in approvals)
+        assert {d.step for d in approvals} == {'xac_nhan', 'phuong_an', 'dong'}  # cả 3 bước đã tự động
+        assert all(d.reversible_until is None for d in autos if d.action == 'tu_choi')
         assert db.scalar(select(func.count()).select_from(Decision).where(Decision.actor_kind == 'nguoi', Decision.agreed.is_not(None))) > 0
         assert db.scalar(select(func.count()).select_from(StateHistory).where(StateHistory.actor_kind == 'tu_dong')) == len(autos)
-        for d in autos:  # luôn người duyệt: ưu tiên / mức Nặng
-            case = db.get(DefectCase, d.case_id)
-            assert not case.priority and case.max_level != 'nang'
+        for d in autos:  # lỗi ưu tiên luôn do Quản lý duyệt
+            assert not db.get(DefectCase, d.case_id).priority
+        # Một cấp duyệt: không còn bước Cấp trên
+        assert db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.status == 'cho_cap_tren')) == 0
+        assert db.scalar(select(func.count()).select_from(Decision).where(Decision.step == 'cap_tren')) == 0
         # Bản mẫu cũ (chưa tự động) được thay thế khi nâng phiên bản
-        db.get(AppSetting, 'sample_pcba').value = {'version': 1}
+        db.get(AppSetting, 'sample_pcba').value = {'version': 2}
         db.commit()
         assert seed_pcba(db, total=150, weeks=6) == 150
         db.commit()
@@ -61,4 +66,4 @@ def test_pcba_sample_is_consistent_and_idempotent(clients, seed):
         assert any(r['auto'] for r in data['proposals'])
     auto_stats = manager.get('/api/v1/auto-approval/stats', params={'days': 60}).json()
     assert auto_stats['steps']['xac_nhan']['mode'] == 'tu_dong' and auto_stats['steps']['xac_nhan']['auto'] > 0
-    assert auto_stats['steps']['phuong_an']['mode'] == 'goi_y' and auto_stats['steps']['phuong_an']['auto'] == 0
+    assert auto_stats['steps']['phuong_an']['mode'] == 'tu_dong' and auto_stats['steps']['phuong_an']['auto'] > 0
