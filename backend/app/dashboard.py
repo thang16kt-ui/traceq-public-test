@@ -120,7 +120,10 @@ def build_dashboard(db, date_from=None, date_to=None, product_type_id=None, defe
         w = week_start(at)
         if w in weekly:
             weekly[w] += float(total)
-    forecast = forecast_next([weekly[w] for w in weeks])
+    # Chỉ dự báo từ các tuần đã trọn vẹn: tuần đang chạy dở sẽ kéo trung bình xuống sai.
+    end_day = (end - timedelta(seconds=1)).astimezone(VN).date()
+    complete = [w for w in weeks if w + timedelta(days=6) <= end_day]
+    forecast = forecast_next([weekly[w] for w in complete])
     # Loại lỗi xu hướng tăng: 4 tuần gần nhất so với 4 tuần trước đó (sản phẩm lỗi đã xác nhận).
     four = timedelta(weeks=4)
     def type_counts(a, b):
