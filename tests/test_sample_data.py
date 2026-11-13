@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 
 from backend.app.db import SessionLocal
-from backend.app.models import CostActual, DefectCase, StateHistory, Treatment, now
+from backend.app.models import AppSetting, CostActual, Decision, DefectCase, StateHistory, Treatment, now
 from backend.app.sample_data import seed_pcba
 from backend.app.workflow import ACTIONS, CONFIRMED_STATUSES, STATUSES
 
@@ -27,12 +27,32 @@ def test_pcba_sample_is_consistent_and_idempotent(clients, seed):
             steps = db.scalars(select(StateHistory).where(StateHistory.case_id == c.id).order_by(StateHistory.at, StateHistory.id)).all()
             assert steps[-1].to_status == c.status
             for h in steps[1:]:
+                if h.action == 'dao_nguoc':  # Quản lý đảo ngược quyết định tự động (ngoài máy trạng thái, như auto.reverse_decision)
+                    assert h.from_status == 'cho_phuong_an' and h.to_status == 'cho_xac_nhan'
+                    continue
                 assert h.action in ACTIONS and h.from_status in ACTIONS[h.action].sources
         assert db.scalar(select(func.count()).select_from(CostActual).where(CostActual.treatment_id.is_(None))) == 0
         assert db.scalar(select(func.count()).select_from(Treatment)) > 0
+        # Tự động duyệt: có quyết định tự động (không có người), có gợi ý chạy ngầm, có kiểm tra mẫu
+        autos = db.scalars(select(Decision).where(Decision.actor_kind == 'tu_dong')).all()
+        assert autos and all(d.actor_id is None and d.confidence >= 0.9 and d.reversible_until for d in autos)
+        assert db.scalar(select(func.count()).select_from(Decision).where(Decision.actor_kind == 'nguoi', Decision.agreed.is_not(None))) > 0
+        assert db.scalar(select(func.count()).select_from(StateHistory).where(StateHistory.actor_kind == 'tu_dong')) == len(autos)
+        for d in autos:  # luôn người duyệt: ưu tiên / mức Nặng
+            case = db.get(DefectCase, d.case_id)
+            assert not case.priority and case.max_level != 'nang'
+        # Bản mẫu cũ (chưa tự động) được thay thế khi nâng phiên bản
+        db.get(AppSetting, 'sample_pcba').value = {'version': 1}
+        db.commit()
+        assert seed_pcba(db, total=150, weeks=6) == 150
+        db.commit()
+        assert db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.note == 'DỮ LIỆU MẪU · PCBA')) == 150
     manager = clients['manager_test']
     dash = manager.get('/api/v1/dashboard', params={'date_from': (now() - timedelta(weeks=7)).date().isoformat()}).json()
     assert dash['kpi']['defective_count'] > 100 and dash['pareto'] and dash['kpi']['period_cost'] > 0
     report = manager.post('/api/v1/reports', json={'date_from': (now() - timedelta(weeks=7)).date().isoformat(), 'date_to': (now() + timedelta(days=1)).date().isoformat()},
                           headers={'Idempotency-Key': str(uuid.uuid4())})
     assert report.status_code == 201, report.text
+    auto_stats = manager.get('/api/v1/auto-approval/stats', params={'days': 60}).json()
+    assert auto_stats['steps']['xac_nhan']['mode'] == 'tu_dong' and auto_stats['steps']['xac_nhan']['auto'] > 0
+    assert auto_stats['steps']['phuong_an']['mode'] == 'goi_y' and auto_stats['steps']['phuong_an']['auto'] == 0
