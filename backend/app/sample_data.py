@@ -52,9 +52,51 @@ def pick(rng, pairs):
     return rng.choices([p for p, _ in pairs], weights=[w for _, w in pairs])[0]
 
 
-def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
-    if db.scalar(select(ProductType.id).where(ProductType.sku == SKU)):
+SAMPLE_VERSION = 2  # 2 = có tự động duyệt (Tắt → Chỉ gợi ý → Tự động)
+
+
+def remove_pcba(db):
+    """Xóa đúng phần DỮ LIỆU MẪU PCBA (để nạp lại phiên bản mới). Nhật ký kiểm toán được giữ nguyên."""
+    from sqlalchemy import delete
+    from .models import (Attachment, AutoCheck, CaseEvent, CostAllocation, MarketPriceHistory as MPH, Notification, ScanEvent)
+    product = db.scalar(select(ProductType).where(ProductType.sku == SKU))
+    if not product:
         return 0
+    batch_ids = select(Batch.id).where(Batch.product_type_id == product.id)
+    unit_ids = select(Unit.id).where(Unit.batch_id.in_(batch_ids))
+    case_ids = [c for c in db.scalars(select(DefectCase.id).where(DefectCase.unit_id.in_(unit_ids)))]
+    if db.scalar(select(Attachment.id).where(Attachment.case_id.in_(case_ids)).limit(1)):
+        raise RuntimeError('Dữ liệu mẫu đã có ảnh minh chứng (bất biến) – không tự xóa được')
+    entry_ids = select(CostEntry.id).where(CostEntry.case_id.in_(case_ids))
+    for stmt in (delete(AutoCheck).where(AutoCheck.case_id.in_(case_ids)), delete(Notification).where(Notification.case_id.in_(case_ids)),
+                 delete(Decision).where(Decision.case_id.in_(case_ids)), delete(StateHistory).where(StateHistory.case_id.in_(case_ids)),
+                 delete(CostActual).where(CostActual.case_id.in_(case_ids)), delete(CostAllocation).where(CostAllocation.cost_entry_id.in_(entry_ids)),
+                 delete(CostEntry).where(CostEntry.case_id.in_(case_ids)), delete(Treatment).where(Treatment.case_id.in_(case_ids)),
+                 delete(CaseEvent).where(CaseEvent.case_id.in_(case_ids)), delete(ScanEvent).where(ScanEvent.case_id.in_(case_ids)),
+                 delete(CaseDefect).where(CaseDefect.case_id.in_(case_ids)), delete(DefectCase).where(DefectCase.id.in_(case_ids)),
+                 delete(Unit).where(Unit.batch_id.in_(batch_ids)), delete(InspectionSession).where(InspectionSession.batch_id.in_(batch_ids)),
+                 delete(Batch).where(Batch.product_type_id == product.id)):
+        db.execute(stmt)
+    db.delete(product)
+    codes = [t[0] for t in TYPES]
+    for t in db.scalars(select(DefectType).where(DefectType.code.in_(codes))):
+        if not db.scalar(select(CaseDefect.id).where(CaseDefect.defect_type_id == t.id).limit(1)):
+            level_ids = select(DefectLevel.id).where(DefectLevel.defect_type_id == t.id)
+            db.execute(delete(MPH).where(MPH.level_id.in_(level_ids)))
+            db.execute(delete(DefectLevel).where(DefectLevel.defect_type_id == t.id))
+            db.execute(delete(Decision).where(Decision.defect_type_id == t.id))
+            db.delete(t)
+    db.flush()
+    return len(case_ids)
+
+
+def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
+    from .models import AppSetting, AutoCheck
+    marker = db.get(AppSetting, 'sample_pcba')
+    if db.scalar(select(ProductType.id).where(ProductType.sku == SKU)):
+        if marker and marker.value.get('version', 1) >= SAMPLE_VERSION:
+            return 0
+        remove_pcba(db)  # bản mẫu cũ (chưa có tự động duyệt): thay bằng bản mới
     rng = random.Random(seed)
     users = {u.username: u for u in db.scalars(select(User).where(User.username.like('demo.%')))}
     creators = [users[n] for n in ('demo.nguoitao',) if n in users] or [next(iter(users.values()))]
@@ -65,8 +107,8 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
     db.add(product)
     db.flush()
     end = end or now()
-    start_day = (end.astimezone(VN) - timedelta(weeks=weeks)).date()
-    start_day -= timedelta(days=start_day.weekday())
+    today = end.astimezone(VN).date()
+    start_day = today - timedelta(days=today.weekday(), weeks=weeks - 1)  # tuần cuối = tuần hiện tại (dữ liệu tới hôm nay)
     # Danh mục loại lỗi + mức (giá có ngày hiệu lực từ đầu kỳ).
     types, levels = [], {}
     for code, name, prio, weight, prices, hours, criteria, actions in TYPES:
@@ -155,10 +197,55 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                                         actor_kind=kind, reason=reason, at=at, meta=meta or {}))
             case.status, case.status_changed_at, case.updated_at = dst, at, at
 
-        def decide(stepname, action, actor, at, entered, reason=None, extra=None):
+        def decide(stepname, action, actor, at, entered, reason=None, extra=None, kind='nguoi', confidence=None, suggestion=None, agreed=None, until=None):
             at, entered = min(at, end - timedelta(seconds=30)), min(entered, end - timedelta(seconds=60))
-            db.add(Decision(case_id=case.id, step=stepname, actor_id=actor.id, actor_kind='nguoi', action=action, reason=reason, at=at,
-                            defect_type_id=item_specs[0][0].id, entered_at=entered, context={'type': item_specs[0][0].id, 'level': max_level, **(extra or {})}))
+            d = Decision(id=uid(), case_id=case.id, step=stepname, actor_id=actor.id if actor else None, actor_kind=kind, action=action, reason=reason, at=at,
+                         defect_type_id=item_specs[0][0].id, entered_at=entered, confidence=confidence, suggestion=suggestion, agreed=agreed,
+                         reversible_until=until, context={'type': item_specs[0][0].id, 'level': max_level, **(extra or {})})
+            db.add(d)
+            return d
+
+        # Giai đoạn tự động duyệt theo tuần: Tắt → Chỉ gợi ý → Tự động (Xác nhận lỗi, Kiểm tra và đóng).
+        phase = 'tat' if week < weeks // 3 else ('goi_y' if week < 2 * weeks // 3 else 'tu_dong')
+        AGREE = {'xac_nhan': 0.975, 'dong': 0.965, 'phuong_an': 0.88}
+        OTHER = {'xac_nhan_loi': 'tu_choi', 'tu_choi': 'xac_nhan_loi', 'dong_de_xuat': 'yeu_cau_lam_lai', 'yeu_cau_lam_lai': 'dong_de_xuat'}
+
+        def shadow(stepname, chosen):
+            """Gợi ý chạy ngầm cho quyết định của NGƯỜI (đo đồng thuận). None khi đang Tắt."""
+            if phase == 'tat':
+                return {}
+            agreed = rng.random() < AGREE[stepname]
+            if stepname == 'phuong_an':
+                action = chosen if agreed else rng.choice([m for m in ('sua', 'tai_che', 'khac') if m != chosen])
+            else:
+                action = chosen if agreed else OTHER[chosen]
+            conf = round(rng.uniform(0.78, 0.97), 4)
+            return {'suggestion': {'action': action, 'confidence': conf, 'basis': 'DỮ LIỆU MẪU · luật + lịch sử giám sát'}, 'agreed': agreed, 'confidence': conf}
+
+        def auto_decide(stepname, action, at, entered, src, dst, conf):
+            """Quyết định của hệ thống: ghi actor tự động + độ tin cậy + lý do; 10% vào kiểm tra mẫu."""
+            reason = f'Tự động duyệt: đạt kiểm tra trước, độ tin cậy {round(conf * 100)}% ≥ 90%'
+            until = at + timedelta(hours=24)
+            meta = {'confidence': conf, 'suggestion': {'action': action, 'confidence': conf, 'basis': 'luật + lịch sử giám sát'}, 'reversible_until': until.isoformat()}
+            step(action, src, dst, None, at, reason, meta, kind='tu_dong')
+            d = decide(stepname, action, None, at, entered, reason, kind='tu_dong', confidence=conf, suggestion=meta['suggestion'], until=until)
+            if rng.random() < 0.10:
+                db.flush()  # ghi quyết định trước mục kiểm tra mẫu tham chiếu tới nó
+                if d.at < end - timedelta(days=4):
+                    ok = rng.random() < 0.95
+                    d.agreed = ok
+                    checked = min(d.at + timedelta(hours=rng.uniform(4, 30)), end - timedelta(minutes=5))
+                    db.add(AutoCheck(decision_id=d.id, case_id=case.id, step=stepname, defect_type_id=item_specs[0][0].id, created_at=d.at,
+                                     result='dung' if ok else 'sai', note=None if ok else 'Ảnh/kết quả không đủ căn cứ, lẽ ra cần người duyệt',
+                                     checked_by=manager.id, checked_at=checked))
+                    if not ok:
+                        db.add(Decision(case_id=case.id, step=stepname, actor_id=manager.id, actor_kind='nguoi', action='kiem_tra_mau_sai', at=checked,
+                                        reason='Kiểm tra mẫu: quyết định tự động sai', defect_type_id=item_specs[0][0].id, context={'checked_decision': d.id}))
+                else:
+                    db.add(AutoCheck(decision_id=d.id, case_id=case.id, step=stepname, defect_type_id=item_specs[0][0].id, created_at=d.at))
+            return d
+
+        rejected_once = False
 
         # Vị trí trong vòng đời: đề xuất càng gần hiện tại càng có khả năng còn mở.
         age_hours = (end - created).total_seconds() / 3600
@@ -182,7 +269,8 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                     t_now += timedelta(minutes=rng.randint(20, 180))
                     reason = rng.choice(['Ảnh không thấy rõ vị trí lỗi, chụp lại cận cảnh', 'Chụp thiếu mặt sau bo mạch', 'Sai loại lỗi, kiểm tra lại'])
                     step('tu_choi', 'cho_xac_nhan', 'cho_minh_chung', supervisor, t_now, reason)
-                    decide('xac_nhan', 'tu_choi', supervisor, t_now, entered, reason)
+                    decide('xac_nhan', 'tu_choi', supervisor, t_now, entered, reason, **shadow('xac_nhan', 'tu_choi'))
+                    rejected_once = True
                     t_now += timedelta(minutes=rng.randint(10, 90))
                     step('gui_minh_chung', 'cho_minh_chung', 'cho_xac_nhan', creator, t_now)
                     entered = t_now
@@ -192,9 +280,22 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                 step('huy_de_xuat', 'cho_xac_nhan', 'da_huy', manager, t_now, 'Kiểm tra lại: sản phẩm đạt, ghi nhận nhầm')
                 stats['cancelled'] += 1
             else:
-                step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', supervisor, t_now)
-                decide('xac_nhan', 'xac_nhan_loi', supervisor, t_now, entered)
-                case.first_confirmed_at = t_now
+                conf = round(rng.uniform(0.87, 0.995), 4)
+                if phase == 'tu_dong' and not priority and max_level != 'nang' and not rejected_once and conf >= 0.9:
+                    t_auto = entered + timedelta(minutes=rng.randint(1, 4))
+                    d = auto_decide('xac_nhan', 'xac_nhan_loi', t_auto, entered, 'cho_xac_nhan', 'cho_phuong_an', conf)
+                    t_now = t_auto
+                    if rng.random() < 0.015 and t_auto + timedelta(hours=8) < end:  # Quản lý đảo ngược trong 24 giờ
+                        t_rev = t_auto + timedelta(hours=rng.uniform(1, 8))
+                        step('dao_nguoc', 'cho_phuong_an', 'cho_xac_nhan', manager, t_rev, 'Xem lại: lỗi chưa rõ ràng, cần giám sát kiểm tra')
+                        d.reversed_at = t_rev
+                        t_now = t_rev + timedelta(minutes=rng.randint(20, 120))
+                        step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', supervisor, t_now)
+                        decide('xac_nhan', 'xac_nhan_loi', supervisor, t_now, t_rev, **shadow('xac_nhan', 'xac_nhan_loi'))
+                else:
+                    step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', supervisor, t_now)
+                    decide('xac_nhan', 'xac_nhan_loi', supervisor, t_now, entered, **shadow('xac_nhan', 'xac_nhan_loi'))
+                case.first_confirmed_at = min(t_now, end - timedelta(seconds=30))
         if target in ('cho_cap_tren', 'dang_xu_ly', 'cho_dong', 'da_dong') and not cancelled:
             entered = t_now
             t_now += timedelta(minutes=rng.randint(10, 240))
@@ -226,7 +327,7 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             db.flush()  # ghi phương án trước dòng chi phí tham chiếu tới nó
             meta = {'method': method, 'est_cost': format(est, '.2f'), 'est_source': source, 'est_sample_n': sample_n, 'approval_reasons': reasons}
             step('chot_phuong_an', 'cho_phuong_an', 'cho_cap_tren' if reasons else 'dang_xu_ly', supervisor, t_now, note or None, meta)
-            decide('phuong_an', 'chot_phuong_an', supervisor, t_now, entered, extra={'method': method})
+            decide('phuong_an', 'chot_phuong_an', supervisor, t_now, entered, extra={'method': method}, **shadow('phuong_an', method))
             if reasons and target != 'cho_cap_tren':
                 entered = t_now
                 t_now += timedelta(minutes=rng.randint(30, 600))
@@ -256,15 +357,23 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                         entered = t_now
                         t_now += timedelta(hours=rng.uniform(1, 6))
                         step('yeu_cau_lam_lai', 'cho_dong', 'dang_xu_ly', manager, t_now, 'Kiểm tra lại FCT chưa đạt, xử lý tiếp')
-                        decide('dong', 'yeu_cau_lam_lai', manager, t_now, entered, 'Kiểm tra lại FCT chưa đạt')
+                        decide('dong', 'yeu_cau_lam_lai', manager, t_now, entered, 'Kiểm tra lại FCT chưa đạt', **shadow('dong', 'yeu_cau_lam_lai'))
                 if target == 'da_dong':
                     entered = t_now
                     t_now += timedelta(hours=rng.uniform(0.5, 20))
                     closer = manager if rng.random() < 0.25 else supervisor
+                    conf = round(rng.uniform(0.87, 0.995), 4)
+                    auto_ok = (phase == 'tu_dong' and not priority and max_level != 'nang' and method in ('sua', 'khac') and rounds == 1
+                               and est <= THRESHOLD and total_cost <= est * Decimal('1.2') and conf >= 0.9)
+                    if auto_ok:
+                        t_now = entered + timedelta(minutes=rng.randint(1, 5))
                     if t_now > end:
                         t_now = end - timedelta(minutes=1)
-                    step('dong_de_xuat', 'cho_dong', 'da_dong', closer, t_now)
-                    decide('dong', 'dong_de_xuat', closer, t_now, entered)
+                    if auto_ok:
+                        auto_decide('dong', 'dong_de_xuat', t_now, entered, 'cho_dong', 'da_dong', conf)
+                    else:
+                        step('dong_de_xuat', 'cho_dong', 'da_dong', closer, t_now)
+                        decide('dong', 'dong_de_xuat', closer, t_now, entered, **shadow('dong', 'dong_de_xuat'))
                     case.closed_at, case.result = min(t_now, end - timedelta(seconds=30)), method
                     db.add(CostEntry(case_id=case.id, category='xu_ly_thuc_te', amount=total_cost, currency='VND', cost_status='actual',
                                      source_reference=f'{case.code}:mau', created_at=t_now, updated_at=t_now))
@@ -278,6 +387,17 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
         db.add_all(history)
         if n % 100 == 99:
             db.flush()
+    def upsert(key, value):
+        record = db.get(AppSetting, key)
+        if record is None:
+            db.add(AppSetting(key=key, value=value, updated_at=now()))
+        else:
+            record.value, record.updated_at = value, now()
+    upsert('auto_approval', {'kill_switch': False, 'confidence_threshold': 0.9, 'min_reviews': 200, 'target_agreement': 0.95, 'sample_rate': 0.1,
+                             'reverse_hours': 24, 'pause_error_rate': 0.1, 'pause_min_checks': 10, 'new_type_rule': True, 'new_type_min_samples': 30,
+                             'steps': {'xac_nhan': {'mode': 'tu_dong'}, 'phuong_an': {'mode': 'goi_y'}, 'dong': {'mode': 'tu_dong'}}})
+    upsert('auto_approval_model', {'trained_at': (end - timedelta(weeks=weeks // 3)).isoformat(), 'note': 'DỮ LIỆU MẪU'})
+    upsert('sample_pcba', {'version': SAMPLE_VERSION, 'seeded_at': now().isoformat(), 'proposals': total})
     db.add(AuditLog(actor_id=None, action='seed_sample', entity_type='product_types', entity_id=product.id,
                     changed_fields={'sku': SKU, 'proposals': total, **stats}, reason='DỮ LIỆU MẪU PCBA', request_id=uid()))
     db.flush()
