@@ -29,6 +29,15 @@ class ProductIn(Input):
     sku: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=200)
     unit_of_measure: str = Field(default='cái',min_length=1,max_length=40)
+    supervisor_id: UUID | None = None
+    backup_supervisor_id: UUID | None = None
+    unit_cost: Decimal | None = Field(default=None,ge=0,max_digits=18,decimal_places=2)
+    salvage_value: Decimal | None = Field(default=None,ge=0,max_digits=18,decimal_places=2)
+    @model_validator(mode='after')
+    def supervisors_differ(self):
+        if self.supervisor_id and self.supervisor_id==self.backup_supervisor_id: raise ValueError('Giám sát thay thế phải khác giám sát chính')
+        if self.unit_cost is not None and self.salvage_value is not None and self.salvage_value>self.unit_cost: raise ValueError('Giá trị thu hồi không được lớn hơn giá vốn')
+        return self
 
 class BatchIn(Input):
     product_type_id: UUID
@@ -37,8 +46,6 @@ class BatchIn(Input):
 class DefectTypeIn(Input):
     code: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=160)
-    severity_default: Literal['low','medium','high','critical'] = 'medium'
-    is_active: bool = True
 
 class CatalogChange(Input):
     row_version: int = Field(ge=1)
@@ -53,7 +60,6 @@ class DefectTypeEdit(Input):
     reason: str = Field(min_length=3,max_length=2000)
     code: str = Field(min_length=1,max_length=80)
     name: str = Field(min_length=1,max_length=160)
-    severity_default: Literal['low','medium','high','critical'] = 'medium'
 
 class SessionIn(Input):
     batch_id: UUID
@@ -62,7 +68,7 @@ class SessionIn(Input):
     stage: str = Field(min_length=1,max_length=80)
     inspected_count: int | None = Field(default=None,ge=0)
     sample_method: str = Field(default='manual',max_length=160)
-    population_key: str = Field(min_length=1,max_length=160)
+    population_key: str | None = Field(default=None,max_length=160)
     started_at: datetime | None = None
     @field_validator('started_at')
     @classmethod
@@ -79,7 +85,8 @@ class SessionPatch(Input):
 class DefectIn(Input):
     defect_type_id: UUID
     occurrence_count: int = Field(default=1,ge=1,le=1000000)
-    severity: Literal['low','medium','high','critical'] = 'medium'
+    level: Literal['nhe','trung_binh','nang']  # bắt buộc chọn, không có mặc định
+    note: str = Field(default='',max_length=2000)
     suspected_cause: str | None = Field(default=None,max_length=2000)
     verified_cause: str | None = Field(default=None,max_length=2000)
 

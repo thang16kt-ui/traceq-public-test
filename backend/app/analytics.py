@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
-from .auth import ApiError, current_user, require_role
+from .auth import REPORT_VIEWERS, ApiError, current_user, require_role
 from .db import engine
 from .models import *
 from .services import plain, row
@@ -42,7 +42,7 @@ def scoped_sessions(scope):
     return stmt
 
 def valid_cases(scope):
-    return select(DefectCase.id).where(DefectCase.inspection_session_id.in_(scoped_sessions(scope)),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='cancelled')
+    return select(DefectCase.id).where(DefectCase.inspection_session_id.in_(scoped_sessions(scope)),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='da_huy')
 
 def base_counts(db,scope):
     ids=scoped_sessions(scope); cases=valid_cases(scope)
@@ -64,7 +64,7 @@ def base_counts(db,scope):
 
 @router.get('/summary')
 def summary(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     result=base_counts(db,scope); cases=valid_cases(scope)
     costs=db.execute(select(CostEntry.currency,CostEntry.cost_status,func.sum(CostEntry.amount)).where(CostEntry.case_id.in_(cases)).group_by(CostEntry.currency,CostEntry.cost_status)).all()
     allocations=dict(db.execute(select(CostEntry.currency,func.sum(CostAllocation.allocated_amount)).join(CostEntry,CostAllocation.cost_entry_id==CostEntry.id).where(CostEntry.case_id.in_(cases)).group_by(CostEntry.currency)).all())
@@ -79,20 +79,20 @@ def summary(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db
 
 @router.get('/pareto')
 def pareto(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     rows=db.execute(select(DefectType.id,DefectType.code,DefectType.name,func.sum(CaseDefect.occurrence_count),func.count(distinct(CaseDefect.case_id))).join(CaseDefect,CaseDefect.defect_type_id==DefectType.id).where(CaseDefect.case_id.in_(valid_cases(scope))).group_by(DefectType.id).order_by(func.sum(CaseDefect.occurrence_count).desc(),DefectType.name)).all()
     total=sum(r[3] for r in rows); cumulative=0; items=[]
-    severity_rank={'low':0,'medium':1,'high':2,'critical':3}
+    severity_rank={'nhe':0,'trung_binh':1,'nang':2}
     for id,code,name,count,affected in rows:
         cumulative+=count
-        severities=db.scalars(select(CaseDefect.severity).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope)))).all()
+        severities=db.scalars(select(CaseDefect.level).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope)))).all()
         costs=db.execute(select(CostEntry.currency,CostEntry.cost_status,func.sum(CostAllocation.allocated_amount),func.count(distinct(CaseDefect.case_id))).join(CostAllocation,CostAllocation.cost_entry_id==CostEntry.id).join(CaseDefect,CostAllocation.case_defect_id==CaseDefect.id).where(CaseDefect.defect_type_id==id,CaseDefect.case_id.in_(valid_cases(scope))).group_by(CostEntry.currency,CostEntry.cost_status)).all()
-        items.append({'defect_type_id':id,'code':code,'name':name,'occurrence_count':int(count),'affected_cases':affected,'cumulative_percentage':round(cumulative/total*100,2) if total else 0,'severity':max(severities,key=lambda x:severity_rank.get(x,0)),'allocated_costs':[{'currency':c,'cost_status':s,'amount':format(a,'.2f'),'covered_cases':n,'average_per_covered_case':format(a/n,'.2f')} for c,s,a,n in costs]})
+        items.append({'defect_type_id':id,'code':code,'name':name,'occurrence_count':int(count),'affected_cases':affected,'cumulative_percentage':round(cumulative/total*100,2) if total else 0,'level':max(severities,key=lambda x:severity_rank.get(x,0)),'allocated_costs':[{'currency':c,'cost_status':s,'amount':format(a,'.2f'),'covered_cases':n,'average_per_covered_case':format(a/n,'.2f')} for c,s,a,n in costs]})
     return {'items':items,'basis':'occurrences','numerator':total,'denominator':total,'scope':plain(scope),'data_as_of':report_time(db),'warnings':['Một sản phẩm nhiều loại lỗi xuất hiện trong nhiều nhóm. Tỷ trọng Pareto tính theo lượt lỗi, không phải sản phẩm. Chi phí trung bình chỉ dùng hồ sơ có phân bổ.']}
 
 @router.get('/trends')
 def trends(timezone:str='Asia/Ho_Chi_Minh',scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     try: zone=ZoneInfo(timezone)
     except (ZoneInfoNotFoundError,ValueError): raise ApiError(422,'INVALID_TIMEZONE','Múi giờ IANA không hợp lệ')
     sessions=db.scalars(select(InspectionSession).where(InspectionSession.id.in_(scoped_sessions(scope)))).all()
@@ -109,7 +109,7 @@ def trends(timezone:str='Asia/Ho_Chi_Minh',scope:dict=Depends(scope_filters),use
 
 @router.get('/groups')
 def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     ss=db.scalars(select(InspectionSession).where(InspectionSession.id.in_(scoped_sessions(scope)))).all()
     grouped=defaultdict(list)
     labels={}
@@ -121,7 +121,7 @@ def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope
         grouped[key].append(s); labels[key]=label
     items=[]
     for key,sessions in grouped.items():
-        ids=[s.id for s in sessions]; num=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id.in_(ids),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='cancelled'))
+        ids=[s.id for s in sessions]; num=db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.inspection_session_id.in_(ids),DefectCase.first_confirmed_at.is_not(None),DefectCase.status!='da_huy'))
         den=sum(s.inspected_count for s in sessions) if all(s.inspected_count is not None for s in sessions) else None
         overlap=len({s.population_key for s in sessions})<len(sessions)
         items.append({'id':key,'name':labels[key],'numerator':num,'denominator':den,'defect_rate':round(num/den*100,4) if den and num<=den and not overlap else None,'inspection_session_ids':ids})
@@ -129,18 +129,18 @@ def groups(group_by:Literal['batch','shift','line','product_type']='batch',scope
 
 @router.get('/forecast')
 def forecast(scope:dict=Depends(scope_filters),user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     counts=base_counts(db,scope)
     return {'status':'insufficient_data','message':'Chưa đủ dữ liệu để dự báo','model_version':None,'trained':False,'scope':counts['scope'],'data_as_of':counts['data_as_of'],'reasons':['MVP chưa triển khai và kiểm chứng mô hình dự báo.','Cần lịch sử liên tục, mẫu số cùng phạm vi, cách lấy mẫu và dữ liệu số dự kiến kiểm tra.','Cần kiểm chứng theo thời gian, so sánh baseline và khoảng bất định trước khi hiển thị dự báo.'],'requirements':['Lịch sử theo kỳ cùng định nghĩa và phạm vi','Phân biệt thay đổi quy trình/lấy mẫu','Số lượng dự kiến kiểm tra và thử nghiệm sai số theo thời gian']}
 
 @router.get('/imported-summary')
 def imported_summary(user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
-    require_role(user,'manager','admin')
+    require_role(user,*REPORT_VIEWERS)
     records=db.scalars(select(AnalysisRecord)).all()
     by_type=defaultdict(list)
     for r in records: by_type[r.record_type].append(r.data)
     sessions=by_type.get('inspection_sessions',[])
-    cases=[c for c in by_type.get('defect_cases',[]) if c.get('first_confirmed_at') and c.get('status')!='cancelled']
+    cases=[c for c in by_type.get('defect_cases',[]) if c.get('first_confirmed_at') and c.get('status')!='da_huy']
     denominator=sum(int(s['inspected_count']) for s in sessions) if sessions and all(s.get('inspected_count') not in (None,'') for s in sessions) else None
     case_ids={str(c['id']) for c in cases}
     occurrences=sum(int(d['occurrence_count']) for d in by_type.get('case_defects',[]) if str(d.get('case_id')) in case_ids)
@@ -148,3 +148,11 @@ def imported_summary(user:User=Depends(current_user),db:Session=Depends(get_anal
     overlap=len(set(pops))<len(pops)
     latest=db.scalar(select(ImportRun).where(ImportRun.status=='succeeded').order_by(ImportRun.processed_at.desc()).limit(1))
     return {'source':'validated_import_mirror','scope':{'basis':'all_imported_source_ids','measurement_basis':'inspection_opportunities'},'inspected_count':denominator,'defective_count':len(cases),'occurrence_count':occurrences,'defect_rate':round(len(cases)/denominator*100,4) if denominator and len(cases)<=denominator and not overlap else None,'numerator':len(cases),'denominator':denominator,'data_as_of':latest.processed_at.isoformat() if latest and latest.processed_at else None,'latest_import':row(latest) if latest else None,'warnings':['Phạm vi gồm toàn bộ dữ liệu đã nhập và hợp nhất theo ID/phiên bản. Đối soát các gói có phạm vi chồng lấn.']}
+
+
+@router.get('/estimate-accuracy')
+def estimate_accuracy_view(user:User=Depends(current_user),db:Session=Depends(get_analytics_db)):
+    """Sai số ước tính so với thực tế theo nguồn (chỉ đề xuất đã đóng). Không hứa độ chính xác: chỉ số đo."""
+    require_role(user,*REPORT_VIEWERS)
+    from .actuals import estimate_accuracy
+    return {'items':estimate_accuracy(db),'data_as_of':report_time(db)}

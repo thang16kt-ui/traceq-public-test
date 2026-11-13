@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="theme-color" content="#102f2e"/>
+  <meta name="theme-color" content="#0f6e5d"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
+  <link rel="icon" href="/icon-192.png"/>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="TraceQ"/>
   <meta name="description" content="TraceQ — ghi nhận sản phẩm lỗi bằng QR, truy xuất minh chứng và ưu tiên chất lượng."/>
   <title>TraceQ · Quản lý chất lượng</title>
   <style>
@@ -34,7 +39,8 @@
         if(event.target===window||(event.target&&event.target.tagName==='SCRIPT'))show('Chưa tải được giao diện. Hãy thử tải lại hoặc mở link bằng Chrome/Safari.');
       },true);
       window.addEventListener('unhandledrejection',function(){show('Chưa khởi động được giao diện. Hãy thử tải lại TraceQ.');});
-      window.setTimeout(function(){show('Kết nối đang chậm. Bạn có thể chờ thêm hoặc thử tải lại TraceQ.');},15000);
+      window.setTimeout(function(){var t=document.getElementById('traceq-startup-text');if(t)t.textContent='Máy chủ đang khởi động (có thể mất tới 1 phút ở bản miễn phí)…';},4000);
+      window.setTimeout(function(){show('Kết nối đang chậm. Bạn có thể chờ thêm hoặc thử tải lại TraceQ.');},60000);
     })();
   </script>
   <script type="module" src="/src/main.tsx"></script>

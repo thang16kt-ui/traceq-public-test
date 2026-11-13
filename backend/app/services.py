@@ -1,15 +1,15 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 from fastapi import Request
 from sqlalchemy import select, text, update
-from .auth import ApiError, case_access
+from .auth import MANAGERS, ApiError
 from .models import *
 
 def plain(value):
-    if isinstance(value,datetime): return value.isoformat()
+    if isinstance(value,(datetime,date)): return value.isoformat()
     if isinstance(value,Decimal): return format(value,'.2f')
     if isinstance(value,UUID): return str(value)
     if isinstance(value,dict): return {k:plain(v) for k,v in value.items()}
@@ -49,8 +49,8 @@ def get_case(db,user,case_id,lock=False):
     # identity map's pre-lock first_confirmed_at or row_version.
     if lock: stmt=stmt.with_for_update().execution_options(populate_existing=True)
     obj=db.scalar(stmt)
-    if not obj: raise ApiError(404,'NOT_FOUND','Không tìm thấy hồ sơ')
-    case_access(user,obj)
+    from .workflow import can_view
+    if not obj or not can_view(db,user,obj): raise ApiError(404,'NOT_FOUND','Không tìm thấy đề xuất trong phạm vi được phép')
     return obj
 
 def case_detail(db,obj):
@@ -86,11 +86,17 @@ def replace_defects(db,case,defects,user):
         values=item.model_dump(mode='json'); type_id=values['defect_type_id']
         t=db.get(DefectType,type_id)
         if not t or (not t.is_active and type_id not in current): raise ApiError(422,'INVALID_DEFECT_TYPE','Loại lỗi không hợp lệ hoặc ngừng sử dụng')
+        level=db.scalar(select(DefectLevel).where(DefectLevel.defect_type_id==type_id,DefectLevel.level==values['level']))
+        unchanged=type_id in current and current[type_id].level==values['level']
+        if not level or (not level.enabled and not unchanged): raise ApiError(422,'LEVEL_DISABLED','Mức độ đã chọn chưa được Quản lý bật cho loại lỗi này',{'level':'Chọn mức đang dùng'})
+        if not unchanged:
+            values.update(level_id=level.id,level_criteria_snapshot=level.criteria)
+        values['priority_snapshot']=bool(t.priority_flag) if type_id not in current else current[type_id].priority_snapshot or bool(t.priority_flag)
         mark_catalog_used(db, DefectType, type_id)
-        if item.verified_cause and user.role=='inspector': raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
+        if item.verified_cause and not user.has(*MANAGERS): raise ApiError(403,'FORBIDDEN','Chỉ quản lý xác minh nguyên nhân')
         if type_id in current:
             d=current[type_id]
             for k,v in values.items(): setattr(d,k,v)
             bump(d)
-        else: db.add(CaseDefect(case_id=case.id,**values))
+        else: db.add(CaseDefect(case_id=case.id,defect_type_name_snapshot=t.name,defect_type_code_snapshot=t.code,**values))
     db.flush()

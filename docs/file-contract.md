@@ -82,3 +82,13 @@ Lịch sử nhập lưu định danh, checksum, trạng thái, thời điểm v�
 Ví dụ sau chốt: revision 1 đã ghi nhận 8 sản phẩm lỗi; một hồ sơ thuộc đúng đợt gửi đến muộn. Tạo revision 2 cùng kỳ/phạm vi ở cutoff mới, kiểm tra snapshot mới, nhập cập nhật theo ID. Báo cáo cũ còn để đối soát, revision 2 là bản bổ sung được nhận rõ; không sửa âm thầm file revision 1.
 
 Importer nội bộ dùng chung volume không là bridge qua mạng. Tích hợp máy nhà máy cần bridge HTTPS với tài khoản dịch vụ và danh sách thư mục được phép; khi chưa triển khai, tải ZIP thủ công có kiểm tra quyền ở API.
+
+## Thay đổi giá trị từ bản cải tiến (schema ứng dụng 006+)
+
+Cấu trúc gói không đổi (vẫn `schema_version = "1.0"`), nhưng giá trị một số cột đổi nghĩa; hệ thống nhận cần cập nhật:
+
+- `defect_cases.status` ∈ `nhap, cho_minh_chung, cho_xac_nhan, cho_phuong_an, cho_cap_tren, dang_xu_ly, cho_dong, da_dong, da_huy`.
+  Sản phẩm được tính là lỗi khi `first_confirmed_at` có giá trị (Giám sát "Xác nhận lỗi") và trạng thái khác `da_huy`.
+- `case_defects.level` (thay cột `severity`) ∈ `nhe, trung_binh, nang`, do Quản lý cài theo từng loại lỗi; `code`, `name` là snapshot tên/mã loại lỗi lúc ghi nhận.
+- `defect_cases.result` = phương án cuối khi đóng (`sua, tai_che, huy, khac`).
+- Chi phí thực tế khi đóng ghi một dòng `cost_entries` (`category = xu_ly_thuc_te`, `cost_status = actual`).

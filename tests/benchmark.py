@@ -68,7 +68,7 @@ def main():
         connection.execute(insert(m.User), [{**base,'id':actor, 'username':'benchmark', 'display_name':'BENCHMARK ONLY', 'role':'admin','password_hash':hash_password(password),'is_active':True}])
         connection.execute(insert(m.ProductType), [{**base,'id':product,'sku':'BENCH-ONLY','name':'Dữ liệu đo tải riêng','unit_of_measure':'cái','sku_key':catalog_key('BENCH-ONLY'),'name_key':catalog_key('Dữ liệu đo tải riêng')}])
         connection.execute(insert(m.Batch), [{**base,'id':batch,'product_type_id':product,'lot_code':'BENCHMARK','lot_key':catalog_key('BENCHMARK')}])
-        connection.execute(insert(m.DefectType), [{**base,'id':kind,'code':'BENCH-D','name':'Lỗi kiểm thử','severity_default':'medium','is_active':True,'code_key':catalog_key('BENCH-D'),'name_key':catalog_key('Lỗi kiểm thử')}])
+        connection.execute(insert(m.DefectType), [{**base,'id':kind,'code':'BENCH-D','name':'Lỗi kiểm thử','is_active':True,'code_key':catalog_key('BENCH-D'),'name_key':catalog_key('Lỗi kiểm thử')}])
         connection.execute(insert(m.InspectionSession), [
             {**base,'id':export_session,'batch_id':batch,'line':'BENCH','shift':'1','stage':'Final','inspected_count':args.export_records,'sample_method':'all','population_key':'BENCH-EXPORT','started_at':export_start+timedelta(hours=1),'status':'open','created_by':actor},
             {**base,'id':other_session,'batch_id':batch,'line':'BENCH','shift':'2','stage':'Final','inspected_count':args.records-args.export_records,'sample_method':'all','population_key':'BENCH-OTHER','started_at':other_start+timedelta(hours=1),'status':'open','created_by':actor},
@@ -85,7 +85,7 @@ def main():
                 cases.append({**base,'id':case_id,'unit_id':unit,'inspection_session_id':export_session if in_export else other_session,
                     'status':'draft' if draft else 'confirmed','detected_at':stamp,'first_confirmed_at':None if draft else stamp,
                     'created_by':actor,'assigned_to':actor,'note':'BENCHMARK ONLY'})
-                defects.append({**base,'id':uid(),'case_id':case_id,'defect_type_id':kind,'occurrence_count':1,'severity':'medium'})
+                defects.append({**base,'id':uid(),'case_id':case_id,'defect_type_id':kind,'occurrence_count':1,'level':'trung_binh','defect_type_name_snapshot':'Lỗi kiểm thử','defect_type_code_snapshot':'BENCH-D'})
                 if draft: target_ids.append(case_id)
             connection.execute(insert(m.Unit), units)
             connection.execute(insert(m.DefectCase), cases)

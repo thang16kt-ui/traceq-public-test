@@ -23,7 +23,7 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_COLUMNS = {
     "inspection_sessions": ["id", "batch_id", "line", "shift", "stage", "inspected_count", "sample_method", "population_key", "product_type_id", "sku", "product_name", "lot_code", "started_at", "ended_at", "status", "created_at", "updated_at", "row_version"],
     "defect_cases": ["id", "unit_id", "inspection_session_id", "status", "detected_at", "first_confirmed_at", "created_by", "assigned_to", "result", "serial_number", "product_type_id", "sku", "product_name", "lot_code", "created_at", "updated_at", "row_version"],
-    "case_defects": ["id", "case_id", "defect_type_id", "code", "name", "occurrence_count", "severity", "suspected_cause", "verified_cause", "created_at", "updated_at", "row_version"],
+    "case_defects": ["id", "case_id", "defect_type_id", "code", "name", "occurrence_count", "level", "suspected_cause", "verified_cause", "created_at", "updated_at", "row_version"],
     "cost_entries": ["id", "case_id", "category", "amount", "currency", "cost_status", "source_reference", "created_at", "updated_at", "row_version"],
     "cost_allocations": ["id", "cost_entry_id", "case_defect_id", "allocated_amount", "created_at", "updated_at", "row_version"],
 }
@@ -203,17 +203,15 @@ def _validate_rows(tables, manifest):
             required = CORE_COLUMNS[table] - NULLABLE_COLUMNS[table]
             if any(row.get(key) is None for key in required):
                 raise PackageError(f"Required non-null field in {table}")
-            if table == "defect_cases" and row["status"] not in {"draft", "confirmed", "in_progress", "recheck", "closed", "cancelled"}:
+            if table == "defect_cases" and row["status"] not in {"nhap", "cho_minh_chung", "cho_xac_nhan", "cho_phuong_an", "cho_cap_tren", "dang_xu_ly", "cho_dong", "da_dong", "da_huy"}:
                 raise PackageError("Invalid defect case status")
-            if table == "defect_cases" and row["status"] in {"confirmed", "in_progress", "recheck", "closed"} and row.get("first_confirmed_at") is None:
+            if table == "defect_cases" and row["status"] in {"cho_phuong_an", "cho_cap_tren", "dang_xu_ly", "cho_dong", "da_dong"} and row.get("first_confirmed_at") is None:
                 raise PackageError("Confirmed case lacks first_confirmed_at")
-            if table == "defect_cases" and row["status"] == "draft" and row.get("first_confirmed_at") is not None:
+            if table == "defect_cases" and row["status"] == "nhap" and row.get("first_confirmed_at") is not None:
                 raise PackageError("Draft case cannot have first_confirmed_at")
-            if table == "defect_cases" and row["status"] == "closed" and not row.get("result"):
-                raise PackageError("Closed case must have a result")
             if table == "inspection_sessions" and row["status"] not in {"open", "closed"}:
                 raise PackageError("Invalid inspection session status")
-            if table == "case_defects" and row["severity"] not in {"low", "medium", "high", "critical"}:
+            if table == "case_defects" and row["level"] not in {"nhe", "trung_binh", "nang"}:
                 raise PackageError("Invalid defect severity")
             if table == "cost_entries":
                 if row["cost_status"] not in {"actual", "estimated"}:

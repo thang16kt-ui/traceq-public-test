@@ -19,6 +19,6 @@ TRACEQ — GÓI MÃ NGUỒN
    cài thư viện. Nếu chuyển hệ thống đang chạy sang nơi khác, cần bàn giao
    database và file nghiệp vụ theo quy trình sao lưu riêng.
 
-6. Mật khẩu bất kỳ chỉ được bật cho quản lý danh mục của bản test public
-   với các cờ môi trường được nêu trong docs/catalog-lifecycle.md.
+6. Bản test public dùng tài khoản demo theo vai trò; mật khẩu do người quản trị đặt qua DEMO_PASSWORD
+   (đã bỏ ở bản cải tiến: mọi người dùng phải đăng nhập).
    Không có mật khẩu quản trị mặc định cho bản cài đặt mới.
