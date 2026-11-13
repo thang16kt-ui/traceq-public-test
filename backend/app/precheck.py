@@ -62,8 +62,6 @@ def run_checks(db, case):
         checks.append({'code': 'trung_lap', 'result': 'ok', 'text': 'Không trùng đề xuất đang mở hoặc gần đây (cùng serial + loại lỗi)'})
     checks.append({'code': 'khop_loai_loi', 'result': 'chua_ho_tro', 'text': 'Kiểm tra ảnh khớp loại lỗi: chưa hỗ trợ (giám sát tự đánh giá)'})
     if case.priority:
-        checks.append({'code': 'uu_tien', 'result': 'canh_bao', 'text': 'Có lỗi ưu tiên: luôn cần người duyệt, không tự duyệt'})
-    if case.max_level == 'nang':
-        checks.append({'code': 'muc_nang', 'result': 'canh_bao', 'text': 'Có mục mức Nặng: luôn cần người duyệt'})
+        checks.append({'code': 'uu_tien', 'result': 'canh_bao', 'text': 'Có lỗi ưu tiên: Quản lý duyệt, không tự duyệt'})
     return {'passed': all(c['result'] in ('ok', 'chua_ho_tro') for c in checks if c['code'] in ('du_minh_chung', 'chat_luong_anh', 'trung_lap')),
             'checks': checks}

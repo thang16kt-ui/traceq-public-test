@@ -7,8 +7,9 @@ khi đủ số lượt duyệt ở chế độ gợi ý và tỷ lệ đồng th
 Gợi ý = luật minh bạch; độ tin cậy = tỷ lệ (làm trơn Laplace) người duyệt đã chọn giống gợi ý trong cùng ngữ cảnh.
 KHÔNG dùng mô hình phức tạp. Không hứa độ chính xác: chỉ hiển thị số đo thực tế.
 
-LUÔN do người duyệt: lỗi ưu tiên, mức Nặng, phương án Hủy, chi phí vượt ngưỡng cấp trên;
-tùy chọn: loại lỗi mới dưới N mẫu; loại lỗi bị tạm dừng; khi bật "Tạm dừng toàn bộ".
+Một cấp duyệt: lỗi ưu tiên LUÔN do Quản lý duyệt. Lỗi thường (mọi mức, kể cả Nặng) được tự duyệt khi đủ ảnh
+minh chứng; thiếu ảnh/ảnh kém → hệ thống trả người tạo bổ sung; không tự duyệt được (phương án Hủy, chi phí vượt
+ngưỡng, độ tin cậy thấp, loại lỗi mới dưới N mẫu, loại lỗi bị tạm dừng, "Tạm dừng toàn bộ") → Giám sát duyệt.
 """
 import random
 from datetime import datetime, timedelta
@@ -119,22 +120,22 @@ def exclusions(db, case, step, cfg, suggestion):
     if cfg['kill_switch']:
         reasons.append('Đang tạm dừng toàn bộ tự động duyệt')
     if case.priority:
-        reasons.append('Lỗi ưu tiên: luôn do người duyệt')
-    if case.max_level == 'nang':
-        reasons.append('Có mục mức Nặng: luôn do người duyệt')
+        reasons.append('Lỗi ưu tiên: Quản lý duyệt')
+    if step == 'xac_nhan' and evidence_problems(db, case):
+        reasons.append('Minh chứng chưa đủ ảnh/ảnh chưa đạt: không tự duyệt')
     threshold = get_decimal(db, 'approval_threshold')
     t = db.scalar(select(Treatment).where(Treatment.case_id == case.id).order_by(Treatment.decided_at.desc()).limit(1))
     if step == 'phuong_an':
         if suggestion['action'] == 'huy':
-            reasons.append('Phương án Hủy: luôn do người duyệt')
+            reasons.append('Phương án Hủy: Giám sát duyệt')
         est = estimate_for_case(db, case, suggestion['action'])
         if est.cost is None or est.cost > threshold:
-            reasons.append('Chi phí vượt ngưỡng cấp trên hoặc chưa ước tính được')
+            reasons.append('Chi phí vượt ngưỡng hoặc chưa ước tính được: Giám sát duyệt')
     if step == 'dong' and t:
         if t.method == 'huy':
-            reasons.append('Phương án Hủy: luôn do người duyệt')
+            reasons.append('Phương án Hủy: Giám sát duyệt')
         if t.est_cost is not None and t.est_cost > threshold:
-            reasons.append('Chi phí vượt ngưỡng cấp trên')
+            reasons.append('Chi phí vượt ngưỡng: Giám sát duyệt')
     type_id = suggestion['context'].get('type')
     if type_id and type_id in paused_types(db):
         reasons.append('Loại lỗi đang bị tạm dừng tự động duyệt (tỷ lệ sai vượt ngưỡng)')
@@ -159,12 +160,37 @@ def gate(db, step, cfg):
 
 # ---------- Móc sau chuyển trạng thái ----------
 
+def evidence_problems(db, case):
+    """Minh chứng chưa đủ để tự duyệt: mục không có ảnh, ảnh tối/mờ. Trả [] nếu đủ."""
+    from .precheck import run_checks
+    return [c['text'] for c in run_checks(db, case)['checks'] if c['code'] in ('du_minh_chung', 'anh', 'chat_luong_anh') and c['result'] != 'ok']
+
+
+def return_to_creator(db, case, cfg):
+    """Lỗi thường, minh chứng chưa đủ → hệ thống trả người tạo bổ sung (một lần; gửi lại vẫn thiếu thì Giám sát quyết)."""
+    if cfg['kill_switch'] or case.priority:
+        return False
+    problems = evidence_problems(db, case)
+    if not problems:
+        return False
+    returned = db.scalar(select(func.count()).select_from(Decision).where(Decision.case_id == case.id, Decision.actor_kind == 'tu_dong',
+                                                                         Decision.action == 'tu_choi')) or 0
+    if returned:
+        return False
+    from .workflow import transition
+    reason = 'Hệ thống trả lại: minh chứng chưa đủ để tự duyệt – ' + '; '.join(problems)[:900] + '. Hãy chụp bổ sung/chụp lại rồi gửi minh chứng.'
+    transition(db, case, 'tu_choi', None, 'auto', reason, actor_kind='tu_dong', meta={'evidence_problems': problems})
+    return True
+
+
 def on_transition(db, case, action, source, target, actor, actor_kind):
     step = STATUS_STEP.get(target)
-    if not step:
+    if not step or case.status != target:
         return
     cfg = config(db)
     if cfg['steps'][step]['mode'] != 'tu_dong':
+        return
+    if step == 'xac_nhan' and return_to_creator(db, case, cfg):
         return
     suggestion = suggest(db, case, step)
     if exclusions(db, case, step, cfg, suggestion):
@@ -470,6 +496,8 @@ def register():
     from .workflow import AFTER_TRANSITION
     DETAIL_EXTENSIONS.append(suggestion_detail)
     AFTER_TRANSITION.append(on_transition)
+    from .notify import on_waiting
+    AFTER_TRANSITION.append(on_waiting)  # sau tự động duyệt: chỉ báo người khi hệ thống không tự quyết
 
 
 register()

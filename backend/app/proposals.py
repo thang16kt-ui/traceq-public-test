@@ -149,7 +149,7 @@ def detail(db, user, case):
     result['history'] = history(db, case)
     result['allowed_actions'] = allowed_actions(db, user, case)
     product = product_of(db, case)
-    result['can_review'] = user.id in supervisor_ids(db, case, product) or user.has('quan_ly')
+    result['can_review'] = user.has('quan_ly') if case.priority else (user.id in supervisor_ids(db, case, product) or user.has('quan_ly'))
     result['previous_proposals'] = db.scalar(select(func.count()).select_from(DefectCase).where(DefectCase.unit_id == case.unit_id, DefectCase.id != case.id)) or 0
     for extend in DETAIL_EXTENSIONS:
         extend(db, user, case, result)
@@ -230,14 +230,19 @@ def create_proposal(data: ProposalIn, request: Request, user: User = Depends(cur
 
 @router.get('/defect-cases')
 def list_proposals(filter: Literal['tat_ca', 'cho_minh_chung', 'cho_xac_nhan', 'qua_han', 'uu_tien', 'dang_mo', 'cho_cap_tren', 'cho_phuong_an', 'cho_dong', 'dang_xu_ly', 'da_dong', 'nhap'] = 'tat_ca',
-                   view: Literal['mine', 'review', 'approve', 'approved', 'all'] = 'all', search: str = Query('', max_length=100),
+                   view: Literal['mine', 'review', 'manager', 'approve', 'approved', 'all'] = 'all', search: str = Query('', max_length=100),
                    page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
                    user: User = Depends(current_user), db: Session = Depends(get_db)):
     conditions = scope_conditions(db, user)
     if view == 'mine':
         conditions.append(DefectCase.created_by == user.id)
-    elif view == 'review':  # việc của giám sát
+    elif view == 'review':  # việc của giám sát: lỗi thường hệ thống chưa tự duyệt được + xử lý (lỗi ưu tiên do Quản lý duyệt)
         conditions.append(DefectCase.status.in_(('cho_xac_nhan', 'cho_phuong_an', 'dang_xu_ly', 'cho_dong')))
+        conditions.append(or_(DefectCase.priority.is_(False), DefectCase.status == 'dang_xu_ly'))
+        conditions.append(DefectCase.created_by != user.id)
+    elif view == 'manager':  # việc duyệt của Quản lý: lỗi ưu tiên (+ đề xuất cũ còn "Chờ cấp trên")
+        conditions.append(or_(and_(DefectCase.priority, DefectCase.status.in_(('cho_xac_nhan', 'cho_phuong_an', 'cho_dong'))),
+                              DefectCase.status == 'cho_cap_tren'))
         conditions.append(DefectCase.created_by != user.id)
     elif view == 'approve':
         conditions.append(DefectCase.status == 'cho_cap_tren')
@@ -245,6 +250,7 @@ def list_proposals(filter: Literal['tat_ca', 'cho_minh_chung', 'cho_xac_nhan', '
     elif view == 'approved':  # lịch sử của cấp trên: đề xuất đã từng qua bước cấp trên
         from .models import Decision
         conditions.append(DefectCase.id.in_(select(Decision.case_id).where(Decision.step == 'cap_tren')))
+    view_conditions = list(conditions)  # số đếm trên nút lọc theo đúng hàng chờ đang xem
     overdue = and_(DefectCase.deadline_at < now(), DefectCase.status.in_([s for s in OPEN_STATUSES if s != 'nhap']))
     if filter == 'qua_han':
         conditions.append(overdue)
@@ -264,7 +270,7 @@ def list_proposals(filter: Literal['tat_ca', 'cho_minh_chung', 'cho_xac_nhan', '
              sql_case((overdue, 0), else_=1), DefectCase.created_at.desc(), DefectCase.id]
     total = db.scalar(select(func.count()).select_from(DefectCase).where(*conditions))
     cases = db.scalars(select(DefectCase).where(*conditions).order_by(*order).offset((page - 1) * page_size).limit(page_size)).all()
-    base = scope_conditions(db, user) + ([DefectCase.created_by == user.id] if view == 'mine' else [])
+    base = view_conditions
     counts = {
         'cho_minh_chung': db.scalar(select(func.count()).select_from(DefectCase).where(*base, DefectCase.status == 'cho_minh_chung')),
         'cho_xac_nhan': db.scalar(select(func.count()).select_from(DefectCase).where(*base, DefectCase.status == 'cho_xac_nhan')),

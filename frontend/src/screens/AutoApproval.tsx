@@ -34,7 +34,7 @@ function Settings({ data, reload }: { data: Row; reload: () => void }) {
       <Progress value={g.reviews} target={g.min_reviews} label={`Lượt duyệt ở chế độ gợi ý: ${g.reviews}/${g.min_reviews}`} />
       <p className="muted">Đồng thuận với người duyệt: <strong>{pct(g.agreement)}</strong> (mục tiêu {pct(g.target_agreement)}). {g.ready ? <Badge tone="ok">Đủ điều kiện bật Tự động</Badge> : <Badge>Chưa đủ điều kiện</Badge>}</p>
     </section>; })}
-    <Alert tone="info" title="Lộ trình bắt buộc">Luật kiểm tra → Chỉ gợi ý (đo đồng thuận) → Tự động. Luôn do người duyệt: lỗi ưu tiên, mức Nặng, phương án Hủy, chi phí vượt ngưỡng cấp trên.</Alert>
+    <Alert tone="info" title="Lộ trình bắt buộc">Luật kiểm tra → Chỉ gợi ý (huấn luyện, đo đồng thuận) → Tự động. Một cấp duyệt: lỗi ưu tiên do Quản lý duyệt; lỗi thường đủ ảnh minh chứng được tự duyệt; thiếu ảnh/ảnh kém → hệ thống trả người tạo bổ sung; Hủy, vượt ngưỡng chi phí, độ tin cậy thấp → Giám sát duyệt.</Alert>
     <div className="grid-3">
       {num('confidence_threshold', 'Ngưỡng tin cậy để tự duyệt (%)', 'Mặc định 90', 100)}
       {num('min_reviews', 'Số lượt duyệt tối thiểu', 'Mặc định 200')}

@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from backend.app.db import SessionLocal
 from backend.app.models import AppSetting, AutoCheck, Decision, DefectCase, DefectLevel, DefectType, now
-from tests.conftest import step, submit_evidence
+from tests.conftest import step, submit_evidence, submit_with_photos
 
 
 def key():
@@ -71,7 +71,7 @@ def test_auto_confirm_when_all_conditions_met_then_reverse(clients, seed, create
     case = ready_case(clients, create_session, create_case)
     seed_history(case['id'], seed['defect_type_ids'][0])
     set_config({'xac_nhan': 'tu_dong'}, sample_rate=1.0)
-    data = submit_evidence(clients['inspector_test'], case['id']).json()
+    data = submit_with_photos(clients['inspector_test'], case['id']).json()
     assert data['status'] == 'cho_phuong_an' and data['first_confirmed_at']
     auto = [h for h in data['history'] if h['actor_kind'] == 'tu_dong']
     assert auto and auto[0]['action'] == 'xac_nhan_loi' and auto[0]['meta']['confidence'] >= 0.9 and 'Tự động duyệt' in auto[0]['reason']
@@ -93,15 +93,18 @@ def test_mandatory_exclusions_keep_human_in_loop(clients, seed, create_session, 
     set_config({'xac_nhan': 'tu_dong'})
     creator = clients['inspector_test']
     session = create_session(clients['admin_test'])
-    # Mức Nặng
+    # Mức Nặng của lỗi thường: KHÔNG còn bắt buộc người duyệt – đủ ảnh thì tự duyệt.
     heavy = creator.post('/api/v1/defect-cases', json={'inspection_session_id': session['id'], 'serial_number': 'NANG', 'defects': [{'defect_type_id': type_id, 'level': 'nang'}]}, headers=key()).json()
     step(creator, heavy['id'], 'gui_de_xuat')
-    assert submit_evidence(creator, heavy['id']).json()['status'] == 'cho_xac_nhan'
-    # Lỗi ưu tiên
+    assert submit_with_photos(creator, heavy['id']).json()['status'] == 'cho_phuong_an'
+    # Lỗi ưu tiên: luôn Quản lý duyệt (kể cả đủ ảnh); Giám sát không được duyệt.
     with SessionLocal() as db:
         db.get(DefectType, type_id).priority_flag = True; db.commit()
     prio = ready_case(clients, create_session, create_case)
-    assert submit_evidence(creator, prio['id']).json()['status'] == 'cho_xac_nhan'
+    assert submit_with_photos(creator, prio['id']).json()['status'] == 'cho_xac_nhan'
+    assert 'Lỗi ưu tiên: Quản lý duyệt' in clients['manager_test'].get('/api/v1/defect-cases/' + prio['id']).json()['suggestion']['human_required']
+    assert step(clients['supervisor_test'], prio['id'], 'xac_nhan_loi').status_code == 403
+    assert step(clients['manager_test'], prio['id'], 'xac_nhan_loi').status_code == 200
     with SessionLocal() as db:
         db.get(DefectType, type_id).priority_flag = False; db.commit()
     # Kill switch
@@ -115,7 +118,7 @@ def test_mandatory_exclusions_keep_human_in_loop(clients, seed, create_session, 
     fresh = create_case(creator, session['id'], serial='MOI-LOAI')
     fresh = creator.post('/api/v1/defect-cases', json={'inspection_session_id': session['id'], 'serial_number': 'LOAI-2', 'defects': [{'defect_type_id': seed['defect_type_ids'][1], 'level': 'trung_binh'}]}, headers=key()).json()
     step(creator, fresh['id'], 'gui_de_xuat')
-    assert submit_evidence(creator, fresh['id']).json()['status'] == 'cho_xac_nhan'
+    assert submit_with_photos(creator, fresh['id']).json()['status'] == 'cho_xac_nhan'
 
 
 def test_low_confidence_and_failed_precheck_not_auto(clients, seed, create_session, create_case):
@@ -125,7 +128,7 @@ def test_low_confidence_and_failed_precheck_not_auto(clients, seed, create_sessi
     seed_history(anchor['id'], type_id, action='tu_choi', n=20, agreed=False)
     set_config({'xac_nhan': 'tu_dong'})
     case = ready_case(clients, create_session, create_case)
-    detail = submit_evidence(clients['inspector_test'], case['id']).json()
+    detail = submit_with_photos(clients['inspector_test'], case['id']).json()
     assert detail['status'] == 'cho_xac_nhan'
     assert any('dưới ngưỡng' in r for r in clients['supervisor_test'].get('/api/v1/defect-cases/' + case['id']).json()['suggestion']['human_required'])
 
@@ -138,7 +141,7 @@ def test_sample_check_wrong_returns_to_reviewer_and_auto_pauses_type(clients, se
     manager = clients['manager_test']
     for n in range(3):
         case = ready_case(clients, create_session, create_case)
-        assert submit_evidence(clients['inspector_test'], case['id']).json()['status'] == 'cho_phuong_an'
+        assert submit_with_photos(clients['inspector_test'], case['id']).json()['status'] == 'cho_phuong_an'
         pending = manager.get('/api/v1/auto-approval/stats').json()['pending_checks']
         check = next(c for c in pending if c['case']['id'] == case['id'])
         result = manager.post(f"/api/v1/auto-approval/checks/{check['id']}", json={'result': 'sai', 'note': 'Ảnh không đúng lỗi'}, headers=key()).json()
@@ -147,7 +150,7 @@ def test_sample_check_wrong_returns_to_reviewer_and_auto_pauses_type(clients, se
     stats = manager.get('/api/v1/auto-approval/stats').json()
     assert type_id in stats['paused_types'] and stats['steps']['xac_nhan']['wrong'] == 3
     paused = ready_case(clients, create_session, create_case)
-    assert submit_evidence(clients['inspector_test'], paused['id']).json()['status'] == 'cho_xac_nhan'
+    assert submit_with_photos(clients['inspector_test'], paused['id']).json()['status'] == 'cho_xac_nhan'
 
 
 def test_auto_treatment_never_scrap_and_respects_threshold(clients, seed, create_session, create_case, confirm):
@@ -168,3 +171,28 @@ def test_auto_treatment_never_scrap_and_respects_threshold(clients, seed, create
     seed_history(anchor['id'], type_id, step='phuong_an', action='chot_phuong_an', n=200, context={**ctx, 'method': 'huy'})
     other = create_case(clients['inspector_test'], create_session(clients['admin_test'])['id'])
     assert confirm(clients['inspector_test'], other['id']).json()['status'] == 'cho_phuong_an'
+
+
+def test_missing_photos_returned_to_creator_once_then_supervisor(clients, seed, create_session, create_case):
+    """Lỗi thường thiếu ảnh: hệ thống trả người tạo bổ sung (1 lần); gửi lại vẫn không có ảnh → Giám sát quyết."""
+    type_id = seed['defect_type_ids'][0]
+    anchor = ready_case(clients, create_session, create_case)
+    seed_history(anchor['id'], type_id)
+    set_config({'xac_nhan': 'tu_dong'})
+    creator = clients['inspector_test']
+    case = ready_case(clients, create_session, create_case)
+    data = submit_evidence(creator, case['id']).json()  # chỉ có lý do "không chụp được ảnh"
+    assert data['status'] == 'cho_minh_chung'
+    returned = [h for h in data['history'] if h['action'] == 'tu_choi']
+    assert returned and returned[-1]['actor_kind'] == 'tu_dong' and 'không có ảnh' in returned[-1]['reason']
+    with SessionLocal() as db:
+        d = db.scalar(select(Decision).where(Decision.case_id == case['id'], Decision.action == 'tu_choi'))
+        assert d.actor_kind == 'tu_dong' and d.reversible_until is None
+    notes = creator.get('/api/v1/notifications').json()
+    assert any(case['code'] in n['title'] and 'trả lại' in n['title'] for n in notes['items'])
+    again = submit_evidence(creator, case['id']).json()
+    assert again['status'] == 'cho_xac_nhan'  # đã trả một lần → Giám sát quyết
+    assert step(clients['supervisor_test'], case['id'], 'xac_nhan_loi').status_code == 200
+    # Đủ ảnh tốt ngay từ đầu → tự duyệt.
+    good = ready_case(clients, create_session, create_case)
+    assert submit_with_photos(creator, good['id']).json()['status'] == 'cho_phuong_an'

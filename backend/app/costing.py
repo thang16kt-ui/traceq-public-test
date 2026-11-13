@@ -1,5 +1,5 @@
 """Chi phí ước tính (đặc tả 7): nguồn 1 giá thị trường, nguồn 2 dữ liệu thực tế; Hủy = giá vốn,
-Tái chế = giá vốn − giá trị thu hồi. Luôn trả nguồn + số mẫu. Định tuyến cấp trên theo rủi ro."""
+Tái chế = giá vốn − giá trị thu hồi. Luôn trả nguồn + số mẫu."""
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -64,20 +64,6 @@ def estimate_product(method, unit_cost, salvage_value):
     if method == 'tai_che' and salvage_value is not None:
         return Estimate(max(ZERO, unit_cost - salvage_value), 'gia_von_tru_thu_hoi', 0)
     return Estimate(unit_cost, 'gia_von', 0)
-
-
-def approval_reasons(est_cost, threshold, method, priority):
-    """Định tuyến theo rủi ro: lên cấp trên khi chi phí > ngưỡng, phương án Hủy, hoặc có cờ ưu tiên."""
-    reasons = []
-    if priority:
-        reasons.append('Có lỗi ưu tiên')
-    if method == 'huy':
-        reasons.append('Phương án Hủy')
-    if est_cost is None:
-        reasons.append('Chưa ước tính được chi phí (thiếu giá) – cần cấp trên xem xét')
-    elif est_cost > threshold:
-        reasons.append(f'Chi phí ước tính {format(est_cost, ",.0f").replace(",", ".")} ₫ vượt ngưỡng {format(threshold, ",.0f").replace(",", ".")} ₫')
-    return reasons
 
 
 # ---------- Truy vấn DB ----------

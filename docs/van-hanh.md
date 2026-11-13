@@ -47,7 +47,7 @@ Nhịp scheduler hiện ở màn Hệ thống (cảnh báo khi quá 3 phút).
   phiên từ xa; người dùng tự đăng xuất từng thiết bị.
 - Cookie httpOnly + Secure + SameSite=Lax, token CSRF cho mọi thao tác ghi, kiểm Origin, Idempotency-Key.
 - Phân quyền kiểm ở server theo vai trò **và** đối tượng (giám sát chỉ thấy/duyệt sản phẩm mình phụ trách; nháp chỉ người tạo
-  thấy; nguyên tắc 4 mắt: người tạo không tự xác nhận/đóng, cấp trên không duyệt đề xuất mình tạo).
+  thấy; nguyên tắc 4 mắt: người tạo không tự xác nhận/đóng; lỗi ưu tiên chỉ Quản lý duyệt).
 - Minh chứng bất biến: không có API sửa/xóa, trigger DB chặn UPDATE/DELETE, quyền DB runtime không có UPDATE/DELETE trên
   `attachments`, `state_history`, `audit_logs`; tệp ghi một lần, tải về có kiểm mã băm.
 - Ảnh kiểm nội dung thật (JPEG/PNG/WEBP), ≤ 8 MB, ≤ 30 MP, bỏ EXIF (vị trí). Dữ liệu offline trên máy (IndexedDB, bản nháp,

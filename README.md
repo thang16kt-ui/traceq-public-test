@@ -15,13 +15,14 @@ Vận hành, biến môi trường, sao lưu: [docs/van-hanh.md](docs/van-hanh.m
 | Vai trò | Việc chính |
 |---|---|
 | Người tạo | Quét QR/nhập serial → tạo đề xuất (1 đề xuất = 1 sản phẩm, nhiều mục lỗi, mức BẮT BUỘC chọn) → tờ tổng quan → **Gửi đề xuất** → dán QR → chụp minh chứng từng mục → **Gửi minh chứng** |
-| Giám sát (theo sản phẩm) | **Xác nhận lỗi** / **Từ chối** (lý do) → **Chốt phương án** → **Hoàn tất xử lý** (chi phí thực tế, nguyên nhân gốc, ảnh sau) → **Đóng đề xuất** / **Yêu cầu làm lại** |
-| Cấp trên | **Phê duyệt** / **Từ chối** khi chi phí > ngưỡng, phương án Hủy, hoặc có lỗi ưu tiên |
-| Quản lý | Thiết lập danh mục/mức/giá/ngưỡng, Tổng quan, Báo cáo PDF/Excel, Tự động duyệt, khóa tài khoản/đặt lại mật khẩu |
-| Admin | Người dùng + vai trò, danh mục, nhật ký, hệ thống (sức khỏe, sao lưu, lỗi) |
+| Hệ thống (tự động duyệt) | Lỗi thường đủ ảnh minh chứng: tự **Xác nhận lỗi** → **Chốt phương án** → **Đóng đề xuất** (khi đã qua lộ trình Tắt → Chỉ gợi ý → Tự động); thiếu ảnh/ảnh kém → trả người tạo bổ sung |
+| Giám sát (theo sản phẩm) | Lỗi thường hệ thống chưa tự duyệt được (Hủy, vượt ngưỡng chi phí, độ tin cậy thấp…): **Xác nhận lỗi** / **Từ chối** → **Chốt phương án** → **Đóng đề xuất** / **Yêu cầu làm lại**; mọi đề xuất: **Hoàn tất xử lý** (chi phí thực tế, nguyên nhân gốc, ảnh sau) |
+| Quản lý | **Duyệt lỗi ưu tiên** (một cấp duyệt duy nhất), thiết lập danh mục/mức/giá/ngưỡng, Tổng quan, Báo cáo PDF/Excel, Tự động duyệt |
+| Cấp trên | Chỉ theo dõi Tổng quan/Báo cáo (đã bỏ bước phê duyệt) |
+| Admin | Quản lý người dùng + vai trò, danh mục, nhật ký, hệ thống (sức khỏe, sao lưu, lỗi) |
 
-Trạng thái: Nháp → Chờ minh chứng → Chờ xác nhận → Chờ chọn phương án → [Chờ cấp trên] → Đang xử lý → Chờ kiểm tra
-đóng → Đã đóng (nhánh từ chối/làm lại; "Quá hạn" là cờ). Mọi đổi trạng thái đi qua **một** hàm
+**Một cấp duyệt.** Trạng thái: Nháp → Chờ minh chứng → Chờ xác nhận → Chờ chọn phương án → Đang xử lý → Chờ kiểm tra
+đóng → Đã đóng (nhánh từ chối/làm lại; "Quá hạn" là cờ). "Chờ cấp trên" chỉ còn với đề xuất cũ; Quản lý Phê duyệt/Từ chối để giải phóng. Mọi đổi trạng thái đi qua **một** hàm
 (`backend/app/workflow.py: transition`) kiểm quyền + kiểm chuyển hợp lệ + ghi `state_history` + `audit_log`.
 
 ## Chạy cục bộ
@@ -56,7 +57,7 @@ cd frontend && npm test                          # Vitest: hàng đợi offline
 node e2e/full-flow.mjs http://localhost:8080 "$DEMO_PASSWORD" ảnh.jpg   # E2E giao diện nhiều vai trò (cần Playwright)
 ```
 
-Bao gồm: máy trạng thái (mọi tổ hợp), chi phí (nguồn, median, ngoại lai, N mẫu, cửa sổ), định tuyến cấp trên, tự duyệt
+Bao gồm: máy trạng thái (mọi tổ hợp), chi phí (nguồn, median, ngoại lai, N mẫu, cửa sổ), một cấp duyệt (Quản lý cho lỗi ưu tiên), tự duyệt
 (ca loại trừ, cổng bật, đảo ngược, kiểm tra mẫu, tự tạm dừng), cascade cờ ưu tiên, phân quyền (gọi API trái quyền bị chặn),
 đồng thời/idempotency, offline gửi trùng, minh chứng bất biến, sao lưu + diễn tập khôi phục, so schema migration với models.
 

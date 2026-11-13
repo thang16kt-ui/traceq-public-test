@@ -1,4 +1,4 @@
-// E2E giao diện thật, nhiều vai trò: tạo → gửi → chụp → xác nhận → phương án → cấp trên → hoàn tất → đóng → xuất PDF.
+// E2E giao diện thật, nhiều vai trò (một cấp duyệt): tạo lỗi ưu tiên → gửi → chụp → Quản lý xác nhận + chốt phương án → Giám sát hoàn tất → Quản lý đóng → xuất PDF.
 // Chạy với máy chủ có dữ liệu mẫu (ENVIRONMENT=demo):  node e2e/full-flow.mjs http://localhost:8080 <mật-khẩu-demo> <ảnh.jpg>
 import { createRequire } from 'node:module';
 // playwright: cài bằng `npm i -D playwright` hoặc dùng bản cài sẵn (NODE_PATH).
@@ -23,7 +23,7 @@ async function as(user, mobile = true) {
 const step = (name) => console.log('✓ ' + name);
 const serial = 'E2E-' + Date.now();
 
-// 1. Người tạo: tạo đề xuất (lỗi ưu tiên → sẽ lên cấp trên), tờ tổng quan, gửi, chụp minh chứng.
+// 1. Người tạo: tạo đề xuất (lỗi ưu tiên → Quản lý duyệt), tờ tổng quan, gửi, chụp minh chứng.
 const creator = await as('demo.nguoitao');
 await creator.goto(base + '/#/tao');
 await creator.getByLabel('Serial sản phẩm').fill(serial);
@@ -47,29 +47,22 @@ await creator.getByText('Chờ xác nhận').first().waitFor();
 const url = creator.url();
 step('Chụp và gửi minh chứng');
 
-// 2. Giám sát: xác nhận lỗi, chọn phương án Sửa.
+// 2. Quản lý (một cấp duyệt – lỗi ưu tiên): xác nhận lỗi, chốt phương án Sửa → Đang xử lý.
+const manager = await as('demo.quanly', false);
+await manager.goto(url);
+await manager.getByText('Hệ thống đã kiểm tra trước').waitFor();
+await manager.getByRole('button', { name: 'Xác nhận lỗi' }).click();
+await manager.getByText('Đề xuất đã được xác nhận bởi').waitFor();
+step('Quản lý xác nhận lỗi ưu tiên');
+await manager.getByText(/^Sửa/).first().click();
+await manager.getByText('Một cấp duyệt: chốt xong chuyển thẳng sang xử lý.').waitFor();
+await manager.getByRole('button', { name: 'Chốt phương án' }).click();
+await manager.getByText('Đang xử lý').first().waitFor();
+step('Quản lý chốt phương án → Đang xử lý (không còn bước cấp trên)');
+
+// 3. Giám sát: ảnh sau xử lý, chi phí thực tế, hoàn tất.
 const supervisor = await as('demo.giamsat');
 await supervisor.goto(url);
-await supervisor.getByText('Hệ thống đã kiểm tra trước').waitFor();
-await supervisor.getByRole('button', { name: 'Xác nhận lỗi' }).click();
-await supervisor.getByText('Đề xuất đã được xác nhận bởi').waitFor();
-step('Giám sát xác nhận lỗi');
-await supervisor.getByText(/^Sửa/).first().click();
-await supervisor.getByText('Sẽ cần cấp trên duyệt vì:').waitFor();
-await supervisor.getByRole('button', { name: 'Chốt phương án' }).click();
-await supervisor.getByText('Phương án chờ cấp trên phê duyệt').waitFor();
-step('Chốt phương án → chờ cấp trên (lỗi ưu tiên)');
-
-// 3. Cấp trên phê duyệt.
-const approver = await as('demo.captren');
-await approver.goto(url);
-await approver.getByText('Cần cấp trên duyệt vì:').waitFor();
-await approver.getByRole('button', { name: 'Phê duyệt' }).click();
-await approver.getByText('Đang xử lý').first().waitFor();
-step('Cấp trên phê duyệt');
-
-// 4. Giám sát: ảnh sau xử lý, chi phí thực tế, hoàn tất, đóng.
-await supervisor.reload();
 await supervisor.getByText('Hoàn tất xử lý', { exact: true }).first().waitFor();
 await supervisor.locator('.after-row input[type=file]').first().setInputFiles(photo);
 await supervisor.waitForTimeout(1500);
@@ -78,13 +71,15 @@ await supervisor.getByLabel('Số giờ công').fill('1.5');
 await supervisor.getByRole('button', { name: 'Máy móc' }).click();
 await supervisor.getByRole('button', { name: 'Hoàn tất xử lý' }).click();
 await supervisor.getByText('Kiểm tra và đóng').waitFor();
-step('Hoàn tất xử lý (chi phí thực tế + nguyên nhân gốc + ảnh sau)');
-await supervisor.getByRole('button', { name: 'Đóng đề xuất' }).click();
-await supervisor.getByText('Đã đóng').first().waitFor();
-step('Đóng đề xuất');
+step('Giám sát hoàn tất xử lý (chi phí thực tế + nguyên nhân gốc + ảnh sau)');
+
+// 4. Quản lý: kiểm tra và đóng.
+await manager.reload();
+await manager.getByRole('button', { name: 'Đóng đề xuất' }).click();
+await manager.getByText('Đã đóng').first().waitFor();
+step('Quản lý đóng đề xuất');
 
 // 5. Quản lý: xuất PDF.
-const manager = await as('demo.quanly', false);
 await manager.goto(url);
 const [pdf] = await Promise.all([manager.waitForEvent('download'), manager.getByRole('button', { name: 'Xuất PDF' }).click()]);
 const file = await pdf.path();

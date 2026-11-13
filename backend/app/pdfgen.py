@@ -116,7 +116,7 @@ def proposal_pdf(detail, exported_by, photos_loader):
             rows += [['Phương án', METHOD_LABELS.get(treatment['method'], treatment['method'])],
                      ['Chi phí ước tính', f'{money(treatment["est_cost"])} (nguồn: {treatment.get("est_source_label", treatment["est_source"])}, {treatment["est_sample_n"]} mẫu)']]
             if treatment.get('approval_reasons'):
-                rows.append(['Cần cấp trên duyệt vì', '; '.join(treatment['approval_reasons'])])
+                rows.append(['Lý do cần duyệt (quy trình cũ)', '; '.join(treatment['approval_reasons'])])
         if cost:
             rows += [['Chi phí thực tế', f'{money(cost["total"])} (vật tư {money(cost["material"])}, {cost["hours"]} giờ × {money(cost["hourly_rate"])}, khác {money(cost["other"])})'],
                      ['Nguyên nhân gốc', ', '.join(cost.get('root_causes') or []) or '—']]

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from .actuals import allocate
@@ -107,7 +107,9 @@ def build_dashboard(db, date_from=None, date_to=None, product_type_id=None, defe
     open_ = [DefectCase.status.in_(OPEN_STATUSES), *filters]
     overdue = db.scalar(select(func.count()).select_from(DefectCase).where(*open_, DefectCase.status != 'nhap', DefectCase.deadline_at < moment))
     waiting_supervisor = db.scalar(select(func.count()).select_from(DefectCase).where(*filters, DefectCase.status == 'cho_xac_nhan'))
-    waiting_approver = db.scalar(select(func.count()).select_from(DefectCase).where(*filters, DefectCase.status == 'cho_cap_tren'))
+    # Một cấp duyệt: "chờ Quản lý" = lỗi ưu tiên đang chờ duyệt (+ đề xuất cũ còn "Chờ cấp trên").
+    waiting_approver = db.scalar(select(func.count()).select_from(DefectCase).where(*filters, or_(
+        and_(DefectCase.priority, DefectCase.status.in_(('cho_xac_nhan', 'cho_phuong_an', 'cho_dong'))), DefectCase.status == 'cho_cap_tren')))
     scope = {'period_start': start, 'period_end': end, **({'product_type_id': str(product_type_id)} if product_type_id else {})}
     counts = base_counts(db, scope)
     # Chi phí thực tế ghi nhận trong kỳ (theo thời điểm nhập ở "Hoàn tất xử lý").

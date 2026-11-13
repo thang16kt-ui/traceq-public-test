@@ -1,10 +1,10 @@
-"""Hạng mục 8: chốt phương án, định tuyến cấp trên, phê duyệt/từ chối."""
+"""Hạng mục 8: chốt phương án – một cấp duyệt (Giám sát lỗi thường, Quản lý lỗi ưu tiên); đề xuất cũ "Chờ cấp trên"."""
 import uuid
 from decimal import Decimal
 
 from backend.app.db import SessionLocal
-from backend.app.models import DefectType, DefectLevel
-from tests.conftest import step
+from backend.app.models import DefectCase, DefectLevel, DefectType, Treatment
+from tests.conftest import step, submit_evidence
 
 
 def key():
@@ -45,38 +45,51 @@ def test_cheap_repair_goes_straight_to_processing(clients, seed, create_session,
     assert data['treatment']['est_source_label'] == 'Giá thị trường'
 
 
-def test_expensive_scrap_priority_need_approver_with_reasons(clients, seed, create_session, create_case, confirm):
+def test_expensive_and_scrap_take_effect_without_second_level(clients, seed, create_session, create_case, confirm):
     set_prices(seed, '5000000')
     case = confirmed_case(clients, create_session, create_case, confirm)
-    data = choose(clients['supervisor_test'], case['id'], 'sua').json()
-    assert data['status'] == 'cho_cap_tren' and 'vượt ngưỡng' in data['treatment']['approval_reasons'][0]
-    approver = clients['approver_test']
-    assert approver.get('/api/v1/defect-cases?view=approve').json()['total'] == 1
-    rejected = step(approver, case['id'], 'cap_tren_tu_choi', 'Sửa không kinh tế, cân nhắc tái chế')
-    assert rejected.json()['status'] == 'cho_phuong_an' and rejected.json()['treatment']['status'] == 'bi_tu_choi'
+    preview = clients['supervisor_test'].get(f"/api/v1/defect-cases/{case['id']}/estimate?method=sua").json()
+    assert preview['needs_approval'] is False and preview['approval_reasons'] == []
     scrap = choose(clients['supervisor_test'], case['id'], 'huy').json()
-    assert scrap['status'] == 'cho_cap_tren' and 'Phương án Hủy' in scrap['treatment']['approval_reasons']
+    assert scrap['status'] == 'dang_xu_ly' and scrap['treatment']['status'] == 'hieu_luc' and scrap['treatment']['approval_reasons'] == []
     assert scrap['treatment']['est_cost'] == '1000000.00' and scrap['treatment']['est_source'] == 'gia_von'
-    approved = step(approver, case['id'], 'phe_duyet').json()
-    assert approved['status'] == 'dang_xu_ly' and approved['treatment']['approved_by'] == 'approver_test'
-    assert [t['status'] for t in approved['treatment_history']] == ['bi_tu_choi', 'hieu_luc']
-    assert approver.get('/api/v1/defect-cases?view=approved').json()['total'] == 1
+    assert clients['approver_test'].get('/api/v1/defect-cases?view=approve').json()['total'] == 0
 
 
-def test_priority_always_needs_approver_and_other_needs_note(clients, seed, create_session, create_case, confirm):
+def test_priority_reviewed_only_by_manager(clients, seed, create_session, create_case):
     set_prices(seed, '1000', priority=True)
-    case = confirmed_case(clients, create_session, create_case, confirm)
-    supervisor = clients['supervisor_test']
-    assert choose(supervisor, case['id'], 'khac').json()['code'] == 'NOTE_REQUIRED'
-    data = choose(supervisor, case['id'], 'sua').json()
-    assert data['status'] == 'cho_cap_tren' and data['treatment']['approval_reasons'] == ['Có lỗi ưu tiên']
+    creator, supervisor, manager = clients['inspector_test'], clients['supervisor_test'], clients['manager_test']
+    case = create_case(creator, create_session(clients['admin_test'])['id'])
+    step(creator, case['id'], 'gui_de_xuat')
+    submit_evidence(creator, case['id'])
+    assert supervisor.get('/api/v1/defect-cases?view=review').json()['total'] == 0  # không nằm trong việc của Giám sát
+    queue = manager.get('/api/v1/defect-cases?view=manager').json()
+    assert [i['id'] for i in queue['items']] == [case['id']]
+    assert step(supervisor, case['id'], 'xac_nhan_loi').status_code == 403
+    assert step(manager, case['id'], 'xac_nhan_loi').json()['status'] == 'cho_phuong_an'
+    assert choose(supervisor, case['id'], 'sua').status_code == 403
+    assert choose(manager, case['id'], 'khac').json()['code'] == 'NOTE_REQUIRED'
+    data = choose(manager, case['id'], 'sua').json()
+    assert data['status'] == 'dang_xu_ly' and data['treatment']['status'] == 'hieu_luc'
+    assert manager.get('/api/v1/defect-cases?view=manager').json()['total'] == 0
 
 
-def test_only_supervisor_chooses_and_only_approver_approves(clients, seed, create_session, create_case, confirm):
+def test_only_reviewer_chooses_and_legacy_cho_cap_tren_released_by_manager(clients, seed, create_session, create_case, confirm):
     set_prices(seed, '9000000')
     case = confirmed_case(clients, create_session, create_case, confirm)
     assert choose(clients['inspector_test'], case['id'], 'sua').status_code == 403
     assert choose(clients['approver_test'], case['id'], 'sua').status_code == 403
-    choose(clients['supervisor_test'], case['id'], 'sua')
-    assert step(clients['supervisor_test'], case['id'], 'phe_duyet').status_code == 403
-    assert step(clients['manager_test'], case['id'], 'phe_duyet').status_code == 403
+    assert choose(clients['supervisor_test'], case['id'], 'sua').json()['status'] == 'dang_xu_ly'
+    assert step(clients['manager_test'], case['id'], 'phe_duyet').status_code == 409  # không còn bước Cấp trên
+    # Đề xuất cũ đang "Chờ cấp trên" (trước khi bỏ bước): Quản lý giải phóng; Cấp trên/Giám sát không còn quyền.
+    old = confirmed_case(clients, create_session, create_case, confirm)
+    choose(clients['supervisor_test'], old['id'], 'sua')
+    with SessionLocal() as db:
+        db.get(DefectCase, old['id']).status = 'cho_cap_tren'
+        db.query(Treatment).filter_by(case_id=old['id']).update({'status': 'cho_duyet'})
+        db.commit()
+    assert any(i['id'] == old['id'] for i in clients['manager_test'].get('/api/v1/defect-cases?view=manager').json()['items'])
+    assert step(clients['approver_test'], old['id'], 'phe_duyet').status_code == 403
+    assert step(clients['supervisor_test'], old['id'], 'phe_duyet').status_code == 403
+    released = step(clients['manager_test'], old['id'], 'phe_duyet').json()
+    assert released['status'] == 'dang_xu_ly' and released['treatment']['status'] == 'hieu_luc'

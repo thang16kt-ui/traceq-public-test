@@ -1,7 +1,7 @@
-"""Unit test chi phí ước tính và định tuyến cấp trên (hàm thuần)."""
+"""Unit test chi phí ước tính (hàm thuần)."""
 from decimal import Decimal as D
 
-from backend.app.costing import approval_reasons, estimate_product, estimate_repair, pick_unit_cost
+from backend.app.costing import estimate_product, estimate_repair, pick_unit_cost
 
 
 def test_auto_mode_uses_actual_only_with_enough_samples():
@@ -27,16 +27,6 @@ def test_scrap_is_unit_cost_and_recycle_subtracts_salvage():
     assert recycle.cost == D('750') and recycle.source == 'gia_von_tru_thu_hoi'
     assert estimate_product('tai_che', D('900'), None).source == 'gia_von'
     assert estimate_product('huy', None, None).cost is None
-
-
-def test_routing_rules():
-    threshold = D('1000')
-    assert approval_reasons(D('500'), threshold, 'sua', False) == []
-    assert approval_reasons(D('1000'), threshold, 'sua', False) == []  # bằng ngưỡng: không vượt
-    assert len(approval_reasons(D('1001'), threshold, 'sua', False)) == 1
-    assert approval_reasons(D('1'), threshold, 'huy', False) == ['Phương án Hủy']
-    assert approval_reasons(D('1'), threshold, 'sua', True) == ['Có lỗi ưu tiên']
-    assert 'Chưa ước tính' in approval_reasons(None, threshold, 'sua', False)[0]
 
 
 from backend.app.actuals import allocate, median, remove_outliers, robust_median

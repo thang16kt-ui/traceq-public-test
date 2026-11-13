@@ -4,10 +4,11 @@ import pytest
 from backend.app.workflow import ACTIONS, STATUSES, InvalidTransition, next_status
 
 HAPPY = [('nhap', 'gui_de_xuat', 'cho_minh_chung'), ('cho_minh_chung', 'gui_minh_chung', 'cho_xac_nhan'),
-         ('cho_xac_nhan', 'xac_nhan_loi', 'cho_phuong_an'), ('cho_cap_tren', 'phe_duyet', 'dang_xu_ly'),
+         ('cho_xac_nhan', 'xac_nhan_loi', 'cho_phuong_an'), ('cho_phuong_an', 'chot_phuong_an', 'dang_xu_ly'),
          ('dang_xu_ly', 'hoan_tat_xu_ly', 'cho_dong'), ('cho_dong', 'dong_de_xuat', 'da_dong')]
-BRANCHES = [('cho_xac_nhan', 'tu_choi', 'cho_minh_chung'), ('cho_cap_tren', 'cap_tren_tu_choi', 'cho_phuong_an'),
-            ('cho_dong', 'yeu_cau_lam_lai', 'dang_xu_ly')]
+BRANCHES = [('cho_xac_nhan', 'tu_choi', 'cho_minh_chung'), ('cho_dong', 'yeu_cau_lam_lai', 'dang_xu_ly'),
+            # chỉ để giải phóng đề xuất cũ còn "Chờ cấp trên"
+            ('cho_cap_tren', 'phe_duyet', 'dang_xu_ly'), ('cho_cap_tren', 'cap_tren_tu_choi', 'cho_phuong_an')]
 
 
 @pytest.mark.parametrize('source,action,target', HAPPY + BRANCHES)
@@ -15,9 +16,9 @@ def test_valid_transitions(source, action, target):
     assert next_status(source, action) == target
 
 
-def test_choose_treatment_routes_by_risk():
-    assert next_status('cho_phuong_an', 'chot_phuong_an', needs_approval=True) == 'cho_cap_tren'
-    assert next_status('cho_phuong_an', 'chot_phuong_an', needs_approval=False) == 'dang_xu_ly'
+def test_one_approval_level_no_new_case_enters_cho_cap_tren():
+    assert next_status('cho_phuong_an', 'chot_phuong_an') == 'dang_xu_ly'
+    assert not any(spec.target == 'cho_cap_tren' for spec in ACTIONS.values())
 
 
 def test_every_other_combination_is_rejected():

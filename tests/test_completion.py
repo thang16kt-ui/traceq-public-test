@@ -24,13 +24,12 @@ def complete(client, case_id, **body):
     return client.post(f'/api/v1/defect-cases/{case_id}/complete', json={'row_version': version, **body}, headers=key())
 
 
-def test_full_flow_with_approver_rework_and_close(clients, seed):
+def test_full_flow_one_level_rework_and_close(clients, seed):
     with SessionLocal() as db:
-        db.get(DefectType, seed['defect_type_ids'][0]).priority_flag = True  # luôn lên cấp trên
         for level in db.scalars(select(DefectLevel)):
             level.market_price = Decimal('200000')
         db.commit()
-    creator, supervisor, approver, manager = (clients[k] for k in ('inspector_test', 'supervisor_test', 'approver_test', 'manager_test'))
+    creator, supervisor, manager = (clients[k] for k in ('inspector_test', 'supervisor_test', 'manager_test'))
     session = creator.post('/api/v1/inspection-sessions', json={'batch_id': seed['batch_id'], 'line': 'L1', 'shift': 'Ca 1', 'stage': 'Cuối', 'inspected_count': 50}, headers=key()).json()
     case = creator.post('/api/v1/defect-cases', json={'inspection_session_id': session['id'], 'serial_number': 'E2E-1',
                         'defects': [{'defect_type_id': seed['defect_type_ids'][0], 'occurrence_count': 2, 'level': 'trung_binh'}]}, headers=key()).json()
@@ -42,8 +41,7 @@ def test_full_flow_with_approver_rework_and_close(clients, seed):
     assert step(supervisor, case['id'], 'xac_nhan_loi').json()['status'] == 'cho_phuong_an'
     version = supervisor.get('/api/v1/defect-cases/' + case['id']).json()['row_version']
     chosen = supervisor.post(f"/api/v1/defect-cases/{case['id']}/treatment", json={'row_version': version, 'method': 'sua'}, headers=key()).json()
-    assert chosen['status'] == 'cho_cap_tren' and chosen['treatment']['est_cost'] == '400000.00'
-    assert step(approver, case['id'], 'phe_duyet').json()['status'] == 'dang_xu_ly'
+    assert chosen['status'] == 'dang_xu_ly' and chosen['treatment']['est_cost'] == '400000.00'  # một cấp duyệt
     # Ảnh sau xử lý chỉ thêm khi Đang xử lý, bởi giám sát.
     assert creator.post(f"/api/v1/defect-cases/{case['id']}/items/{item}/photos", files={'file': ('b.jpg', jpg(), 'image/jpeg')}, data={'kind': 'sau'}, headers=key()).status_code == 403
     assert supervisor.post(f"/api/v1/defect-cases/{case['id']}/items/{item}/photos", files={'file': ('b.jpg', jpg(), 'image/jpeg')}, data={'kind': 'sau'}, headers=key()).status_code == 201
@@ -58,7 +56,7 @@ def test_full_flow_with_approver_rework_and_close(clients, seed):
     closed = step(supervisor, case['id'], 'dong_de_xuat').json()
     assert closed['status'] == 'da_dong' and closed['closed_at']
     labels = [h['label'] for h in closed['history'] if h['kind'] == 'trang_thai']
-    assert labels == ['Tạo nháp', 'Gửi đề xuất', 'Gửi minh chứng', 'Xác nhận lỗi', 'Chốt phương án', 'Phê duyệt', 'Hoàn tất xử lý',
+    assert labels == ['Tạo nháp', 'Gửi đề xuất', 'Gửi minh chứng', 'Xác nhận lỗi', 'Chốt phương án', 'Hoàn tất xử lý',
                       'Yêu cầu làm lại', 'Hoàn tất xử lý', 'Đóng đề xuất']
     with SessionLocal() as db:
         entry = db.scalar(select(CostEntry).where(CostEntry.case_id == case['id']))
@@ -75,9 +73,7 @@ def test_complete_validates_root_causes_and_amounts(clients, seed, create_sessio
     confirm(creator, case['id'])
     version = supervisor.get('/api/v1/defect-cases/' + case['id']).json()['row_version']
     supervisor.post(f"/api/v1/defect-cases/{case['id']}/treatment", json={'row_version': version, 'method': 'sua'}, headers=key())
-    status = supervisor.get('/api/v1/defect-cases/' + case['id']).json()['status']
-    if status == 'cho_cap_tren':
-        step(clients['approver_test'], case['id'], 'phe_duyet')
+    assert supervisor.get('/api/v1/defect-cases/' + case['id']).json()['status'] == 'dang_xu_ly'
     assert complete(supervisor, case['id'], material='-1', root_causes=['Máy móc']).status_code == 422
     assert complete(supervisor, case['id'], root_causes=['Thời tiết']).status_code == 422
     assert complete(supervisor, case['id'], root_causes=[]).status_code == 422
