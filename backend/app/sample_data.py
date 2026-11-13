@@ -1,8 +1,9 @@
 """DỮ LIỆU MẪU sát thực tế cho MỘT loại sản phẩm: bo mạch điều khiển PCBA (lắp ráp điện tử).
 
 ~1000 đề xuất lỗi trong 12 tuần, 3 ca/tuần-ngày, ~21.000 sản phẩm đã kiểm (tỷ lệ lỗi ~5%), 8 loại lỗi điển hình
-của dây chuyền SMT/hàn sóng, đủ vòng đời: gửi → (từ chối/chụp lại) → xác nhận → phương án → (cấp trên) → xử lý
-→ (làm lại) → đóng; có chi phí ước tính/thực tế, nguyên nhân gốc, quyết định của người duyệt, đề xuất đang mở/quá hạn.
+của dây chuyền SMT/hàn sóng, đủ vòng đời: gửi → (trả lại/chụp lại) → xác nhận → phương án → xử lý → (làm lại) → đóng.
+Một cấp duyệt: lỗi ưu tiên do Quản lý duyệt; lỗi thường theo lộ trình Tắt → Chỉ gợi ý → Tự động (cả 3 bước), không tự
+duyệt được thì Giám sát duyệt. Có chi phí ước tính/thực tế, nguyên nhân gốc, kiểm tra mẫu, đảo ngược, đề xuất mở/quá hạn.
 
 Chỉ chạy ở ENVIRONMENT=demo. Idempotent: đã có SKU mẫu thì bỏ qua. Không kèm ảnh (đĩa bản free là tạm);
 mục lỗi ghi lý do "DỮ LIỆU MẪU: không kèm ảnh".
@@ -15,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from .models import (AuditLog, Batch, CaseDefect, CostActual, CostEntry, Decision, DefectCase, DefectLevel, DefectType, InspectionSession,
+from .models import (METHOD_LABELS, AuditLog, Batch, CaseDefect, CostActual, CostEntry, Decision, DefectCase, DefectLevel, DefectType, InspectionSession,
                      MarketPriceHistory, ProductType, StateHistory, Treatment, Unit, User, now, proposal_code_seq, uid)
 
 VN = ZoneInfo('Asia/Ho_Chi_Minh')
@@ -52,7 +53,7 @@ def pick(rng, pairs):
     return rng.choices([p for p, _ in pairs], weights=[w for _, w in pairs])[0]
 
 
-SAMPLE_VERSION = 2  # 2 = có tự động duyệt (Tắt → Chỉ gợi ý → Tự động)
+SAMPLE_VERSION = 3  # 3 = một cấp duyệt: lỗi ưu tiên → Quản lý; lỗi thường tự động duyệt (Tắt → Chỉ gợi ý → Tự động)
 
 
 def remove_pcba(db):
@@ -101,7 +102,7 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
     users = {u.username: u for u in db.scalars(select(User).where(User.username.like('demo.%')))}
     creators = [users[n] for n in ('demo.nguoitao',) if n in users] or [next(iter(users.values()))]
     supervisor, backup = users['demo.giamsat'], users.get('demo.giamsat2', users['demo.giamsat'])
-    approver, manager = users.get('demo.captren', supervisor), users.get('demo.quanly', supervisor)
+    manager = users.get('demo.quanly', supervisor)
     product = ProductType(sku=SKU, name='Bo mạch điều khiển máy giặt (PCBA) · DỮ LIỆU MẪU', unit_of_measure='bo mạch',
                           supervisor_id=supervisor.id, backup_supervisor_id=backup.id, unit_cost=UNIT_COST, salvage_value=SALVAGE)
     db.add(product)
@@ -205,9 +206,10 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             db.add(d)
             return d
 
-        # Giai đoạn tự động duyệt theo tuần: Tắt → Chỉ gợi ý → Tự động (Xác nhận lỗi, Kiểm tra và đóng).
+        # Giai đoạn tự động duyệt theo tuần: Tắt → Chỉ gợi ý (huấn luyện, đo đồng thuận) → Tự động (cả 3 bước, lỗi thường).
         phase = 'tat' if week < weeks // 3 else ('goi_y' if week < 2 * weeks // 3 else 'tu_dong')
-        AGREE = {'xac_nhan': 0.975, 'dong': 0.965, 'phuong_an': 0.88}
+        AGREE = {'xac_nhan': 0.975, 'dong': 0.97, 'phuong_an': 0.965}
+        reviewer = manager if priority else supervisor  # một cấp duyệt: lỗi ưu tiên do Quản lý duyệt
         OTHER = {'xac_nhan_loi': 'tu_choi', 'tu_choi': 'xac_nhan_loi', 'dong_de_xuat': 'yeu_cau_lam_lai', 'yeu_cau_lam_lai': 'dong_de_xuat'}
 
         def shadow(stepname, chosen):
@@ -222,13 +224,17 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             conf = round(rng.uniform(0.78, 0.97), 4)
             return {'suggestion': {'action': action, 'confidence': conf, 'basis': 'DỮ LIỆU MẪU · luật + lịch sử giám sát'}, 'agreed': agreed, 'confidence': conf}
 
-        def auto_decide(stepname, action, at, entered, src, dst, conf):
+        def auto_decide(stepname, action, at, entered, src, dst, conf, method=None):
             """Quyết định của hệ thống: ghi actor tự động + độ tin cậy + lý do; 10% vào kiểm tra mẫu."""
-            reason = f'Tự động duyệt: đạt kiểm tra trước, độ tin cậy {round(conf * 100)}% ≥ 90%'
+            basis = {'xac_nhan': 'đủ ảnh minh chứng, đạt kiểm tra trước', 'phuong_an': f'phương án {METHOD_LABELS[method] if method else ""} phổ biến nhất cho loại lỗi này',
+                     'dong': 'có ảnh sau xử lý, chi phí trong ±20% ước tính'}[stepname]
+            reason = f'Tự động duyệt: {basis}; độ tin cậy {round(conf * 100)}% ≥ 90%'
             until = at + timedelta(hours=24)
-            meta = {'confidence': conf, 'suggestion': {'action': action, 'confidence': conf, 'basis': 'luật + lịch sử giám sát'}, 'reversible_until': until.isoformat()}
+            suggestion = {'action': method or action, 'confidence': conf, 'basis': basis}
+            meta = {'confidence': conf, 'suggestion': suggestion, 'reversible_until': until.isoformat(), **({'method': method} if method else {})}
             step(action, src, dst, None, at, reason, meta, kind='tu_dong')
-            d = decide(stepname, action, None, at, entered, reason, kind='tu_dong', confidence=conf, suggestion=meta['suggestion'], until=until)
+            d = decide(stepname, action, None, at, entered, reason, extra={'method': method} if method else None, kind='tu_dong', confidence=conf,
+                       suggestion=suggestion, until=until)
             if rng.random() < 0.10:
                 db.flush()  # ghi quyết định trước mục kiểm tra mẫu tham chiếu tới nó
                 if d.at < end - timedelta(days=4):
@@ -254,8 +260,8 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             r = rng.random()
             open_share = 0.85 if age_hours < 3 * 24 else 0.12
             if r < open_share:
-                target = rng.choices(['nhap', 'cho_minh_chung', 'cho_xac_nhan', 'cho_phuong_an', 'cho_cap_tren', 'dang_xu_ly', 'cho_dong'],
-                                     weights=(4, 10, 20, 12, 10, 28, 16))[0]
+                target = rng.choices(['nhap', 'cho_minh_chung', 'cho_xac_nhan', 'cho_phuong_an', 'dang_xu_ly', 'cho_dong'],
+                                     weights=(4, 10, 20, 12, 28, 16))[0]
         cancelled = target == 'da_dong' and rng.random() < 0.03
         step('tao_nhap', None, 'nhap', creator, created)
         t_now = submitted
@@ -265,23 +271,30 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             if target != 'cho_minh_chung':
                 step('gui_minh_chung', 'cho_minh_chung', 'cho_xac_nhan', creator, t_now)
                 entered = t_now
-                if rng.random() < 0.07:  # giám sát từ chối, chụp lại
-                    t_now += timedelta(minutes=rng.randint(20, 180))
-                    reason = rng.choice(['Ảnh không thấy rõ vị trí lỗi, chụp lại cận cảnh', 'Chụp thiếu mặt sau bo mạch', 'Sai loại lỗi, kiểm tra lại'])
-                    step('tu_choi', 'cho_xac_nhan', 'cho_minh_chung', supervisor, t_now, reason)
-                    decide('xac_nhan', 'tu_choi', supervisor, t_now, entered, reason, **shadow('xac_nhan', 'tu_choi'))
-                    rejected_once = True
+                if rng.random() < 0.07:  # minh chứng chưa đạt → trả người tạo chụp lại
+                    if phase == 'tu_dong' and not priority:  # hệ thống tự trả (thiếu ảnh / ảnh tối, mờ)
+                        t_now = entered + timedelta(minutes=rng.randint(1, 3))
+                        problem = rng.choice(['Mục lỗi chưa có ảnh', 'Ảnh 1: quá tối', 'Ảnh 2: mờ, rung tay'])
+                        reason = f'Hệ thống trả lại: minh chứng chưa đủ để tự duyệt – {problem}. Hãy chụp bổ sung/chụp lại rồi gửi minh chứng.'
+                        step('tu_choi', 'cho_xac_nhan', 'cho_minh_chung', None, t_now, reason, {'evidence_problems': [problem]}, kind='tu_dong')
+                        decide('xac_nhan', 'tu_choi', None, t_now, entered, reason, kind='tu_dong')
+                    else:
+                        t_now += timedelta(minutes=rng.randint(20, 180))
+                        reason = rng.choice(['Ảnh không thấy rõ vị trí lỗi, chụp lại cận cảnh', 'Chụp thiếu mặt sau bo mạch', 'Sai loại lỗi, kiểm tra lại'])
+                        step('tu_choi', 'cho_xac_nhan', 'cho_minh_chung', reviewer, t_now, reason)
+                        decide('xac_nhan', 'tu_choi', reviewer, t_now, entered, reason, **shadow('xac_nhan', 'tu_choi'))
+                        rejected_once = True
                     t_now += timedelta(minutes=rng.randint(10, 90))
                     step('gui_minh_chung', 'cho_minh_chung', 'cho_xac_nhan', creator, t_now)
                     entered = t_now
-        if target in ('cho_phuong_an', 'cho_cap_tren', 'dang_xu_ly', 'cho_dong', 'da_dong'):
+        if target in ('cho_phuong_an', 'dang_xu_ly', 'cho_dong', 'da_dong'):
             t_now += timedelta(minutes=rng.randint(15, 300))
             if cancelled:
                 step('huy_de_xuat', 'cho_xac_nhan', 'da_huy', manager, t_now, 'Kiểm tra lại: sản phẩm đạt, ghi nhận nhầm')
                 stats['cancelled'] += 1
             else:
                 conf = round(rng.uniform(0.87, 0.995), 4)
-                if phase == 'tu_dong' and not priority and max_level != 'nang' and not rejected_once and conf >= 0.9:
+                if phase == 'tu_dong' and not priority and not rejected_once and conf >= 0.9:
                     t_auto = entered + timedelta(minutes=rng.randint(1, 4))
                     d = auto_decide('xac_nhan', 'xac_nhan_loi', t_auto, entered, 'cho_xac_nhan', 'cho_phuong_an', conf)
                     t_now = t_auto
@@ -293,10 +306,10 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                         step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', supervisor, t_now)
                         decide('xac_nhan', 'xac_nhan_loi', supervisor, t_now, t_rev, **shadow('xac_nhan', 'xac_nhan_loi'))
                 else:
-                    step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', supervisor, t_now)
-                    decide('xac_nhan', 'xac_nhan_loi', supervisor, t_now, entered, **shadow('xac_nhan', 'xac_nhan_loi'))
+                    step('xac_nhan_loi', 'cho_xac_nhan', 'cho_phuong_an', reviewer, t_now)
+                    decide('xac_nhan', 'xac_nhan_loi', reviewer, t_now, entered, **shadow('xac_nhan', 'xac_nhan_loi'))
                 case.first_confirmed_at = min(t_now, end - timedelta(seconds=30))
-        if target in ('cho_cap_tren', 'dang_xu_ly', 'cho_dong', 'da_dong') and not cancelled:
+        if target in ('dang_xu_ly', 'cho_dong', 'da_dong') and not cancelled:
             entered = t_now
             t_now += timedelta(minutes=rng.randint(10, 240))
             # Phương án theo mức nặng nhất + gợi ý.
@@ -304,8 +317,6 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             if priority:
                 weights_m = (20, 30, 50, 0)
             method = rng.choices(('sua', 'tai_che', 'huy', 'khac'), weights=weights_m)[0]
-            if target == 'cho_cap_tren' and not priority:
-                method = 'huy'  # đề xuất đang chờ cấp trên: phương án Hủy cần duyệt
             if method == 'huy':
                 est, source, sample_n = UNIT_COST, 'gia_von', 0
             elif method == 'tai_che':
@@ -318,22 +329,22 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                     est, source = (market * Decimal('0.93')).quantize(Decimal('1')), 'thuc_te'
                 else:
                     est, source = market, 'gia_thi_truong'
-            reasons = (['Có lỗi ưu tiên'] if priority else []) + (['Phương án Hủy'] if method == 'huy' else []) + (['Chi phí ước tính vượt ngưỡng'] if est > THRESHOLD else [])
             note = 'Chuyển kiểm tra lại toàn bộ bo cùng lô' if method == 'khac' else ''
+            conf = round(rng.uniform(0.87, 0.995), 4)
+            auto_plan = phase == 'tu_dong' and not priority and method != 'huy' and est <= THRESHOLD and conf >= 0.9
+            if auto_plan:
+                t_now = entered + timedelta(minutes=rng.randint(1, 4))
             treatment = Treatment(id=uid(), case_id=case.id, method=method, note=note, est_cost=est, est_source=source, est_sample_n=sample_n, est_breakdown=[],
-                                  deadline_at=deadline, needs_approval=bool(reasons), approval_reasons=reasons,
-                                  status='cho_duyet' if reasons else 'hieu_luc', decided_by=supervisor.id, decided_at=min(t_now, end - timedelta(seconds=30)))
+                                  deadline_at=deadline, needs_approval=False, approval_reasons=[], status='hieu_luc',
+                                  decided_by=(supervisor if auto_plan else reviewer).id, decided_at=min(t_now, end - timedelta(seconds=30)))
             db.add(treatment)
             db.flush()  # ghi phương án trước dòng chi phí tham chiếu tới nó
-            meta = {'method': method, 'est_cost': format(est, '.2f'), 'est_source': source, 'est_sample_n': sample_n, 'approval_reasons': reasons}
-            step('chot_phuong_an', 'cho_phuong_an', 'cho_cap_tren' if reasons else 'dang_xu_ly', supervisor, t_now, note or None, meta)
-            decide('phuong_an', 'chot_phuong_an', supervisor, t_now, entered, extra={'method': method}, **shadow('phuong_an', method))
-            if reasons and target != 'cho_cap_tren':
-                entered = t_now
-                t_now += timedelta(minutes=rng.randint(30, 600))
-                step('phe_duyet', 'cho_cap_tren', 'dang_xu_ly', approver, t_now)
-                decide('cap_tren', 'phe_duyet', approver, t_now, entered)
-                treatment.status, treatment.approved_by, treatment.approved_at = 'hieu_luc', approver.id, min(t_now, end - timedelta(seconds=30))
+            if auto_plan:
+                auto_decide('phuong_an', 'chot_phuong_an', t_now, entered, 'cho_phuong_an', 'dang_xu_ly', conf, method=method)
+            else:
+                meta = {'method': method, 'est_cost': format(est, '.2f'), 'est_source': source, 'est_sample_n': sample_n}
+                step('chot_phuong_an', 'cho_phuong_an', 'dang_xu_ly', reviewer, t_now, note or None, meta)
+                decide('phuong_an', 'chot_phuong_an', reviewer, t_now, entered, extra={'method': method}, **shadow('phuong_an', method))
             if target in ('cho_dong', 'da_dong'):
                 rounds = 2 if method == 'sua' and rng.random() < 0.06 else 1
                 total_cost = Decimal('0')
@@ -356,14 +367,14 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
                     if r == 0 and rounds == 2:
                         entered = t_now
                         t_now += timedelta(hours=rng.uniform(1, 6))
-                        step('yeu_cau_lam_lai', 'cho_dong', 'dang_xu_ly', manager, t_now, 'Kiểm tra lại FCT chưa đạt, xử lý tiếp')
-                        decide('dong', 'yeu_cau_lam_lai', manager, t_now, entered, 'Kiểm tra lại FCT chưa đạt', **shadow('dong', 'yeu_cau_lam_lai'))
+                        step('yeu_cau_lam_lai', 'cho_dong', 'dang_xu_ly', reviewer, t_now, 'Kiểm tra lại FCT chưa đạt, xử lý tiếp')
+                        decide('dong', 'yeu_cau_lam_lai', reviewer, t_now, entered, 'Kiểm tra lại FCT chưa đạt', **shadow('dong', 'yeu_cau_lam_lai'))
                 if target == 'da_dong':
                     entered = t_now
                     t_now += timedelta(hours=rng.uniform(0.5, 20))
-                    closer = manager if rng.random() < 0.25 else supervisor
+                    closer = reviewer
                     conf = round(rng.uniform(0.87, 0.995), 4)
-                    auto_ok = (phase == 'tu_dong' and not priority and max_level != 'nang' and method in ('sua', 'khac') and rounds == 1
+                    auto_ok = (phase == 'tu_dong' and not priority and method != 'huy' and rounds == 1
                                and est <= THRESHOLD and total_cost <= est * Decimal('1.2') and conf >= 0.9)
                     if auto_ok:
                         t_now = entered + timedelta(minutes=rng.randint(1, 5))
@@ -395,7 +406,7 @@ def seed_pcba(db, total=1000, weeks=12, seed=2026, end=None):
             record.value, record.updated_at = value, now()
     upsert('auto_approval', {'kill_switch': False, 'confidence_threshold': 0.9, 'min_reviews': 200, 'target_agreement': 0.95, 'sample_rate': 0.1,
                              'reverse_hours': 24, 'pause_error_rate': 0.1, 'pause_min_checks': 10, 'new_type_rule': True, 'new_type_min_samples': 30,
-                             'steps': {'xac_nhan': {'mode': 'tu_dong'}, 'phuong_an': {'mode': 'goi_y'}, 'dong': {'mode': 'tu_dong'}}})
+                             'steps': {'xac_nhan': {'mode': 'tu_dong'}, 'phuong_an': {'mode': 'tu_dong'}, 'dong': {'mode': 'tu_dong'}}})
     upsert('auto_approval_model', {'trained_at': (end - timedelta(weeks=weeks // 3)).isoformat(), 'note': 'DỮ LIỆU MẪU'})
     upsert('sample_pcba', {'version': SAMPLE_VERSION, 'seeded_at': now().isoformat(), 'proposals': total})
     db.add(AuditLog(actor_id=None, action='seed_sample', entity_type='product_types', entity_id=product.id,
