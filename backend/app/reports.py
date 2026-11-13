@@ -77,7 +77,11 @@ def report_data(db, params):
             item = next((i for i in items if i.id == a.case_defect_id), None)
             evidence.append({'code': c.code, 'item': item.defect_type_name_snapshot if item else '—', 'kind': 'Trước xử lý' if a.kind == 'truoc' else 'Sau xử lý',
                              'taken_at': a.taken_at or a.created_at, 'sha256': a.sha256, 'storage_key': a.storage_key, 'case_id': c.id})
-    return {'dashboard': dash, 'proposals': rows, 'evidence': evidence, 'truncated': len(cases) >= MAX_PROPOSALS}
+    scope_name = 'Toàn nhà máy'
+    if params.get('product_type_id'):
+        chosen = db.get(ProductType, str(params['product_type_id']))
+        scope_name = f'{chosen.name} ({chosen.sku})' if chosen else 'Sản phẩm đã chọn'
+    return {'dashboard': dash, 'proposals': rows, 'evidence': evidence, 'truncated': len(cases) >= MAX_PROPOSALS, 'scope_name': scope_name}
 
 
 def vn(t):
@@ -95,7 +99,7 @@ def render_pdf(data, code, exported_by, params):
     period = f"{params['date_from'].strftime('%d/%m/%Y')} – {params['date_to'].strftime('%d/%m/%Y')}"
     story = [p('TraceQ · Báo cáo chất lượng sản phẩm', 'small'), p(f'BÁO CÁO {code}', 'title'),
              kv([['Mã báo cáo', code], ['Kỳ báo cáo', period], ['Người xuất', exported_by], ['Giờ xuất', vn(now())],
-                 ['Phạm vi', 'Theo sản phẩm đã chọn' if params.get('product_type_id') else 'Toàn nhà máy']])]
+                 ['Phạm vi', data.get('scope_name', 'Toàn nhà máy')]])]
     if 'kpi' in sections:
         story += [p('Chỉ số chính', 'h2'), kv([
             ['Sản phẩm lỗi đã xác nhận', f"{k['defective_count']} / {k['inspected_count'] if k['inspected_count'] is not None else '?'} đã kiểm"],
@@ -155,7 +159,7 @@ def render_xlsx(data, code, exported_by, params):
     ws = wb.active
     ws.title = 'Thong tin'
     d, k = data['dashboard'], data['dashboard']['kpi']
-    for row in [['Mã báo cáo', code], ['Kỳ', f"{params['date_from']} – {params['date_to']}"], ['Người xuất', exported_by], ['Giờ xuất', vn(now())],
+    for row in [['Mã báo cáo', code], ['Phạm vi', safe_cell(data.get('scope_name', 'Toàn nhà máy'))], ['Kỳ', f"{params['date_from']} – {params['date_to']}"], ['Người xuất', exported_by], ['Giờ xuất', vn(now())],
                 ['Sản phẩm lỗi', k['defective_count']], ['Số đã kiểm', k['inspected_count']], ['Tỷ lệ lỗi (%)', k['defect_rate']],
                 ['Chi phí thực tế (VND)', k['period_cost']], ['Chi phí / SP đã kiểm (VND)', k['cost_per_inspected']]]:
         ws.append(row)
