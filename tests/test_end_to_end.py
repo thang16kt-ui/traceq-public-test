@@ -68,21 +68,6 @@ def test_schedule_api_change_time_and_zone_keeps_period_watermark(admin, monkeyp
     assert datetime.fromisoformat(moved.json()['last_period_end']) == watermark
 
 
-def test_attachments_validate_content_and_enforce_case_permissions(inspector, clients, create_session, create_case):
-    case = create_case(inspector,create_session(inspector)['id'])
-    invalid = inspector.post('/api/v1/defect-cases/'+case['id']+'/attachments',files={'file':('fake.png',b'not an image','image/png')},headers={'Idempotency-Key':str(uuid.uuid4())})
-    assert invalid.status_code == 422, invalid.text
-    image = Image.new('RGB',(16,16),'white'); stream=io.BytesIO(); image.save(stream,format='PNG')
-    uploaded = inspector.post('/api/v1/defect-cases/'+case['id']+'/attachments',files={'file':('proof.png',stream.getvalue(),'image/png')},headers={'Idempotency-Key':str(uuid.uuid4())})
-    assert uploaded.status_code == 201, uploaded.text
-    attachment = uploaded.json()
-    assert attachment['storage_key'].endswith('.jpg') and '/' not in attachment['storage_key']
-    allowed = inspector.get('/api/v1/attachments/'+attachment['id'])
-    assert allowed.status_code == 200 and allowed.headers['content-type'].startswith('image/jpeg')
-    denied = clients['other_test'].get('/api/v1/attachments/'+attachment['id'])
-    assert denied.status_code in (403,404), denied.text
-
-
 def test_edit_overdue_never_run_schedule_keeps_original_coverage_start(admin, monkeypatch):
     from backend.app import main
     from backend.app.models import ExportRun

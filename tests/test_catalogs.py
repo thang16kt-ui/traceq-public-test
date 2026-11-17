@@ -61,7 +61,7 @@ def test_used_catalog_is_archived_and_restored_without_breaking_history(admin, s
     assert identity not in [x['id'] for x in admin.get('/api/v1/'+kind).json()['items']]
     assert identity in [x['id'] for x in admin.get('/api/v1/'+kind+'?state=inactive').json()['items']]
     detail = admin.get('/api/v1/defect-cases/'+case['id'])
-    assert detail.status_code==200 and detail.json()['defects'][0]['defect_type']['name']=='Lỗi bề mặt'
+    assert detail.status_code==200 and detail.json()['items'][0]['name']=='Lỗi bề mặt'
     after = admin.get('/api/v1/analytics/summary').json()
     assert after['defective_count']==before['defective_count']==1
     restored = change(admin,kind,archived.json()['item'],'restore')
@@ -83,7 +83,7 @@ def test_normalized_duplicate_is_rejected_even_when_archived(admin,seed,create_s
     assert send(admin,'POST','/'+kind,payload).status_code==409
 
 
-def test_manager_can_edit_but_inspector_and_public_guest_cannot_mutate(admin, clients, seed, monkeypatch):
+def test_manager_can_edit_but_creator_cannot_mutate(admin, clients, seed):
     item = find(admin,'product-types',seed['product_type_id'])
     body = {'sku':item['sku'],'name':'Sản phẩm đã sửa','unit_of_measure':'bộ'}
     for method, path, payload in [
@@ -93,28 +93,10 @@ def test_manager_can_edit_but_inspector_and_public_guest_cannot_mutate(admin, cl
         ('POST','/product-types',{'sku':'X','name':'X'}),
     ]:
         assert send(clients['inspector_test'],method,path,payload).status_code==403
-        monkeypatch.setattr(auth,'PUBLIC_DEMO_ACCESS',True);monkeypatch.setattr(auth,'ENVIRONMENT','demo')
-        with TestClient(app) as guest:
-            data=guest.get('/api/v1/auth/me').json()
-            guest.headers.update({'X-CSRF-Token':data['csrf_token'],'Origin':'http://testserver'})
-            assert data['user']['role']=='admin'  # even an old admin guest cannot bypass the guard
-            assert send(guest,method,path,payload).status_code==403
     updated = change(clients['manager_test'],'product-types',item,'edit',**body)
     assert updated.status_code==200, updated.text
     assert updated.json()['item']['name']=='Sản phẩm đã sửa'
     assert change(admin,'product-types',item,'edit',**body).json()['code']=='VERSION_CONFLICT'
-
-
-def test_privileged_login_rejects_inspector_and_identifies_manager(monkeypatch, seed):
-    from tests.conftest import TEST_PASSWORD
-    monkeypatch.setattr(auth,'PUBLIC_DEMO_ACCESS',True);monkeypatch.setattr(auth,'ENVIRONMENT','demo')
-    with TestClient(app) as client:
-        assert client.get('/api/v1/auth/me').json()['access_mode']=='public_demo'
-        denied=client.post('/api/v1/auth/catalog-login',json={'username':'inspector_test','password':TEST_PASSWORD})
-        assert denied.status_code==403
-        logged=client.post('/api/v1/auth/catalog-login',json={'username':'manager_test','password':TEST_PASSWORD})
-        assert logged.status_code==200,logged.text
-        assert client.get('/api/v1/auth/me').json()['access_mode']=='authenticated'
 
 
 def test_inactive_parents_block_new_records_and_require_parent_restore(admin, seed, create_session, create_case):
@@ -124,7 +106,7 @@ def test_inactive_parents_block_new_records_and_require_parent_restore(admin, se
     assert not admin.get('/api/v1/batches').json()['items']
     assert send(admin,'POST','/batches',{'product_type_id':product['id'],'lot_code':'NEW'}).status_code==409
     assert send(admin,'POST','/inspection-sessions',{'batch_id':seed['batch_id'],'line':'L','shift':'C','stage':'S','population_key':'P'}).status_code==409
-    payload={'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0]}]}
+    payload={'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0],'level':'nhe'}]}
     assert send(admin,'POST','/defect-cases',payload).status_code==409
     batch=find(admin,'batches',seed['batch_id'])
     retired=change(admin,'batches',batch).json()['item']
@@ -138,9 +120,9 @@ def test_retired_defect_can_be_kept_on_existing_case_but_not_added(admin,seed,cr
     session=create_session(admin);case=create_case(admin,session['id'])
     assert change(admin,'defect-types',find(admin,'defect-types',seed['defect_type_ids'][0])).status_code==200
     current=admin.get('/api/v1/defect-cases/'+case['id']).json()
-    patched=send(admin,'PATCH','/defect-cases/'+case['id'],{'row_version':current['row_version'],'reason':'Cập nhật ghi chú cũ','defects':[{'defect_type_id':seed['defect_type_ids'][0],'occurrence_count':2}]})
+    patched=send(admin,'PATCH','/defect-cases/'+case['id'],{'row_version':current['row_version'],'reason':'Cập nhật ghi chú cũ','defects':[{'defect_type_id':seed['defect_type_ids'][0],'occurrence_count':2,'level':'trung_binh'}]})
     assert patched.status_code==200,patched.text
-    invalid=send(admin,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0]}]})
+    invalid=send(admin,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'NEW','defects':[{'defect_type_id':seed['defect_type_ids'][0],'level':'nhe'}]})
     assert invalid.status_code==422
 
 
@@ -148,7 +130,7 @@ def test_previously_used_defect_stays_preserved_after_removal_from_case(admin,se
     session=create_session(admin);case=create_case(admin,session['id'],second_defect=True)
     response=send(admin,'PATCH','/defect-cases/'+case['id'],{
         'row_version':case['row_version'],'reason':'Bỏ lỗi sau khi đối soát',
-        'defects':[{'defect_type_id':seed['defect_type_ids'][1]}]})
+        'defects':[{'defect_type_id':seed['defect_type_ids'][1],'level':'trung_binh'}]})
     assert response.status_code==200,response.text
     item=find(admin,'defect-types',seed['defect_type_ids'][0])
     assert item['is_used'] and item['usage']['case_defects']==0
@@ -166,7 +148,7 @@ def test_concurrent_normalized_names_only_create_once(clients):
 @pytest.mark.parametrize('kind,payload', [
     ('product-types',{'sku':'SECOND','name':'Sản phẩm khác','unit_of_measure':'cái'}),
     ('batches',{'lot_code':'SECOND'}),
-    ('defect-types',{'code':'SECOND','name':'Lỗi khác','severity_default':'medium'}),
+    ('defect-types',{'code':'SECOND','name':'Lỗi khác'}),
 ])
 def test_edit_cannot_duplicate_existing_name_and_unprivileged_delete_is_blocked(admin,inspector,seed,kind,payload):
     if kind=='batches': payload={**payload,'product_type_id':seed['product_type_id']}
@@ -183,7 +165,7 @@ def test_delete_racing_new_usage_never_breaks_references(admin,inspector,seed,cr
     session=create_session(inspector)
     item=send(admin,'POST','/defect-types',{'code':'RACE','name':'Lỗi đồng thời'}).json()
     def create():
-        return send(inspector,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'RACE-UNIT','defects':[{'defect_type_id':item['id']}]})
+        return send(inspector,'POST','/defect-cases',{'inspection_session_id':session['id'],'serial_number':'RACE-UNIT','defects':[{'defect_type_id':item['id'],'level':'trung_binh'}]})
     with ThreadPoolExecutor(max_workers=2) as pool:
         a=pool.submit(create);b=pool.submit(change,admin,'defect-types',item)
         created,deleted=a.result(),b.result()
@@ -214,7 +196,7 @@ def test_renaming_catalogs_keeps_versioned_export_import_consistent(admin,seed,c
     for kind,identity,values in [
         ('product-types',seed['product_type_id'],{'sku':'RENAMED','name':'Sản phẩm sửa tên','unit_of_measure':'cái'}),
         ('batches',seed['batch_id'],{'product_type_id':seed['product_type_id'],'lot_code':'LO-SUA-TEN'}),
-        ('defect-types',seed['defect_type_ids'][0],{'code':'D-RENAMED','name':'Lỗi sửa tên','severity_default':'high'}),
+        ('defect-types',seed['defect_type_ids'][0],{'code':'D-RENAMED','name':'Lỗi sửa tên'}),
     ]:
         item=find(admin,kind,identity)
         response=change(admin,kind,item,'edit',**values)
@@ -224,6 +206,39 @@ def test_renaming_catalogs_keeps_versioned_export_import_consistent(admin,seed,c
         data=db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type=='defect_cases')).data
         assert data['product_name']=='Sản phẩm sửa tên' and data['lot_code']=='LO-SUA-TEN'
         defect=db.scalar(select(AnalysisRecord).where(AnalysisRecord.record_type=='case_defects')).data
-        assert defect['name']=='Lỗi sửa tên'
+        assert defect['name']=='Lỗi bề mặt'  # snapshot lúc ghi nhận, không đổi theo danh mục
     detail=admin.get('/api/v1/defect-cases/'+case['id']).json()
-    assert detail['defects'][0]['id']==case['defects'][0]['id']
+    assert detail['items'][0]['id']==case['items'][0]['id']
+
+
+def test_product_supervisors_costs_and_validation(clients, seed):
+    from backend.app.models import User as U
+    manager = clients['manager_test']
+    with SessionLocal() as db:
+        ids = {u.username: u.id for u in db.scalars(select(U))}
+    item = find(manager, 'product-types', seed['product_type_id'])
+    body = {'sku': item['sku'], 'name': item['name'], 'unit_of_measure': 'cái', 'supervisor_id': ids['supervisor_test'],
+            'backup_supervisor_id': ids['supervisor2_test'], 'unit_cost': '1500000', 'salvage_value': '200000'}
+    saved = change(manager, 'product-types', item, 'edit', **body)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['item']['supervisor']['display_name'] == 'supervisor_test'
+    item = saved.json()['item']
+    not_supervisor = change(manager, 'product-types', item, 'edit', **{**body, 'supervisor_id': ids['inspector_test']})
+    assert not_supervisor.json()['code'] == 'INVALID_SUPERVISOR'
+    assert change(manager, 'product-types', item, 'edit', **{**body, 'salvage_value': '9999999'}).status_code == 422
+
+
+def test_settings_validate_and_audit(clients):
+    manager, creator = clients['manager_test'], clients['inspector_test']
+    key = {'Idempotency-Key': str(uuid.uuid4())}
+    assert creator.put('/api/v1/settings/approval_threshold', json={'value': '1'}, headers=key).status_code == 403
+    bad = manager.put('/api/v1/settings/shifts', json={'value': ['Ca 1', 'ca 1']}, headers={'Idempotency-Key': str(uuid.uuid4())})
+    assert bad.status_code == 422
+    ok = manager.put('/api/v1/settings/approval_threshold', json={'value': '3000000', 'reason': 'Theo quyết định QA'}, headers={'Idempotency-Key': str(uuid.uuid4())})
+    assert ok.status_code == 200, ok.text
+    values = {i['key']: i['value'] for i in creator.get('/api/v1/settings').json()['items']}
+    assert values['approval_threshold'] == '3000000' and values['cost_min_samples'] == 5
+    from backend.app.models import AuditLog
+    with SessionLocal() as db:
+        log = db.scalar(select(AuditLog).where(AuditLog.action == 'update_setting'))
+        assert log.changed_fields == {'before': '2000000', 'after': '3000000'}

@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event
+from sqlalchemy import Sequence, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid, event, func, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 
 def uid(): return str(uuid.uuid4())
@@ -13,22 +14,54 @@ class Versioned:
     updated_at = mapped_column(DateTime(timezone=True), default=now, onupdate=now, nullable=False)
     row_version = mapped_column(Integer, default=1, nullable=False)
 
+DEFAULT_SITE_ID = '00000000-0000-0000-0000-000000000001'
+ROLES = ('nguoi_tao', 'giam_sat', 'cap_tren', 'quan_ly', 'admin')
+
+class Site(Base):
+    __tablename__ = 'sites'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    name = mapped_column(String(160), nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
 class User(Base, Versioned):
     __tablename__ = 'users'
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
     username = mapped_column(String(80), unique=True, nullable=False)
+    code = mapped_column(String(40), nullable=True)
     display_name = mapped_column(String(160), nullable=False)
-    role = mapped_column(String(20), nullable=False)
+    roles = mapped_column(ARRAY(String(20)), nullable=False)
     password_hash = mapped_column(Text, nullable=False)
     is_active = mapped_column(Boolean, default=True, nullable=False)
-    __table_args__ = (CheckConstraint("role in ('inspector','manager','admin')"),)
+    locked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_reason = mapped_column(Text, nullable=True)
+    failed_logins = mapped_column(Integer, default=0, server_default='0', nullable=False)
+    locked_until = mapped_column(DateTime(timezone=True), nullable=True)
+    must_change_password = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    last_login_at = mapped_column(DateTime(timezone=True), nullable=True)
+    away_until = mapped_column(DateTime(timezone=True), nullable=True)
+    notify_prefs = mapped_column(JSON, default=dict, server_default='{}', nullable=False)
+    __table_args__ = (
+        CheckConstraint("cardinality(roles) > 0 AND roles <@ ARRAY['nguoi_tao','giam_sat','cap_tren','quan_ly','admin']::varchar(20)[]", name='users_roles_valid'),
+        Index('ix_users_code_lower', func.lower(code), unique=True, postgresql_where=code.isnot(None)),
+    )
+
+    def has(self, *roles):
+        return any(r in (self.roles or ()) for r in roles)
 
 class AuthSession(Base):
     __tablename__ = 'auth_sessions'
     token_hash = mapped_column(String(64), primary_key=True)
-    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    id = mapped_column(Uuid(as_uuid=False), unique=True, default=uid, nullable=False)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
     csrf_token = mapped_column(String(100), nullable=False)
     expires_at = mapped_column(DateTime(timezone=True), nullable=False)
+    device_label = mapped_column(String(160), default='', server_default='', nullable=False)
+    user_agent = mapped_column(String(300), default='', server_default='', nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    last_seen_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    revoked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    remember = mapped_column(Boolean, default=False, server_default='false', nullable=False)
 
 class LoginAttempt(Base):
     __tablename__ = 'login_attempts'
@@ -46,6 +79,12 @@ class ProductType(Base, Versioned):
     name_key = mapped_column(Text, unique=True, nullable=False)
     sku_key = mapped_column(Text, unique=True, nullable=False)
     has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    backup_supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    unit_cost = mapped_column(Numeric(18, 2), nullable=True)
+    salvage_value = mapped_column(Numeric(18, 2), nullable=True)
+    __table_args__ = (CheckConstraint('(unit_cost IS NULL OR unit_cost >= 0) AND (salvage_value IS NULL OR salvage_value >= 0)', name='product_types_costs_nonnegative'),)
 
 class Batch(Base, Versioned):
     __tablename__ = 'batches'
@@ -86,11 +125,50 @@ class DefectType(Base, Versioned):
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
     code = mapped_column(String(80), unique=True, nullable=False)
     name = mapped_column(String(160), nullable=False)
-    severity_default = mapped_column(String(20), default='medium', nullable=False)
     is_active = mapped_column(Boolean, default=True, nullable=False)
     name_key = mapped_column(Text, unique=True, nullable=False)
     code_key = mapped_column(Text, unique=True, nullable=False)
     has_been_used = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    # Cờ "Lỗi đặc biệt: luôn cảnh báo ưu tiên" đặt MỘT LẦN ở loại lỗi, áp cho mọi mức bên trong.
+    priority_flag = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    cost_mode = mapped_column(String(10), default='auto', server_default='auto', nullable=False)
+    __table_args__ = (CheckConstraint("cost_mode IN ('auto','market','actual')", name='defect_types_cost_mode_check'),)
+
+LEVELS = ('nhe', 'trung_binh', 'nang')
+LEVEL_LABELS = {'nhe': 'Nhẹ', 'trung_binh': 'Trung bình', 'nang': 'Nặng'}
+METHODS = ('sua', 'tai_che', 'huy', 'khac')
+METHOD_LABELS = {'sua': 'Sửa', 'tai_che': 'Tái chế', 'huy': 'Hủy', 'khac': 'Khác'}
+
+class DefectLevel(Base, Versioned):
+    __tablename__ = 'defect_levels'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=False)
+    level = mapped_column(String(12), nullable=False)
+    enabled = mapped_column(Boolean, nullable=False, default=False)
+    criteria = mapped_column(Text, nullable=False, default='')
+    market_price = mapped_column(Numeric(18, 2), nullable=True)
+    price_effective_from = mapped_column(Date, nullable=True)
+    deadline_hours = mapped_column(Integer, nullable=True)
+    suggested_actions = mapped_column(ARRAY(String(10)), nullable=False, default=list)
+    __table_args__ = (
+        UniqueConstraint('defect_type_id', 'level', name='defect_levels_type_level_key'),
+        CheckConstraint("level IN ('nhe','trung_binh','nang')", name='defect_levels_level_check'),
+        CheckConstraint('deadline_hours IS NULL OR deadline_hours > 0', name='defect_levels_deadline_check'),
+        CheckConstraint('market_price IS NULL OR market_price >= 0', name='defect_levels_price_check'),
+        CheckConstraint("suggested_actions <@ ARRAY['sua','tai_che','huy','khac']::varchar(10)[]", name='defect_levels_actions_check'),
+    )
+
+class MarketPriceHistory(Base):
+    __tablename__ = 'market_price_history'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    level_id = mapped_column(ForeignKey('defect_levels.id'), nullable=False)
+    price = mapped_column(Numeric(18, 2), nullable=False)
+    effective_from = mapped_column(Date, nullable=False)
+    changed_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    changed_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    reason = mapped_column(Text, nullable=True)
+    __table_args__ = (CheckConstraint('price >= 0', name='market_price_history_price_check'), Index('ix_market_price_history_level', 'level_id', 'effective_from'))
 
 
 def set_catalog_keys(mapper, connection, target):
@@ -108,14 +186,115 @@ class DefectCase(Base, Versioned):
     id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
     unit_id = mapped_column(ForeignKey('units.id'), nullable=False, index=True)
     inspection_session_id = mapped_column(ForeignKey('inspection_sessions.id'), nullable=False, index=True)
-    status = mapped_column(String(30), default='draft', nullable=False)
+    code = mapped_column(String(20), unique=True, nullable=False)
+    status = mapped_column(String(30), default='nhap', nullable=False, index=True)
+    site_id = mapped_column(ForeignKey('sites.id'), default=DEFAULT_SITE_ID, server_default=DEFAULT_SITE_ID, nullable=False)
+    priority = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    max_level = mapped_column(String(12), nullable=True)
+    supervisor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    supervisor_name_snapshot = mapped_column(String(160), nullable=True)
+    submitted_at = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline_at = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    status_changed_at = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     detected_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
     first_confirmed_at = mapped_column(DateTime(timezone=True), nullable=True)
     created_by = mapped_column(ForeignKey('users.id'), nullable=False)
     assigned_to = mapped_column(ForeignKey('users.id'), nullable=True)
     result = mapped_column(String(80), nullable=True)
     note = mapped_column(Text, default='', nullable=False)
-    __table_args__ = (UniqueConstraint('inspection_session_id','unit_id'), CheckConstraint("status in ('draft','confirmed','in_progress','recheck','closed','cancelled')"))
+    __table_args__ = (CheckConstraint("status IN ('nhap','cho_minh_chung','cho_xac_nhan','cho_phuong_an','cho_cap_tren','dang_xu_ly','cho_dong','da_dong','da_huy')", name='defect_cases_status_check'),
+                      Index('ix_defect_cases_one_open_per_unit', 'unit_id', unique=True, postgresql_where=text("status NOT IN ('da_dong','da_huy')")))
+
+proposal_code_seq = Sequence('proposal_code_seq', metadata=Base.metadata)
+
+class StateHistory(Base):
+    __tablename__ = 'state_history'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    from_status = mapped_column(String(20), nullable=True)
+    to_status = mapped_column(String(20), nullable=False)
+    action = mapped_column(String(40), nullable=False)
+    actor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    actor_kind = mapped_column(String(10), nullable=False)  # nguoi | tu_dong | he_thong
+    reason = mapped_column(Text, nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    meta = mapped_column(JSON, default=dict, nullable=False)
+    __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='state_history_actor_kind_check'), Index('ix_state_history_case', 'case_id', 'at'))
+
+class AutoCheck(Base):
+    __tablename__ = 'auto_checks'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    decision_id = mapped_column(ForeignKey('decisions.id'), unique=True, nullable=False)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    step = mapped_column(String(20), nullable=False)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    result = mapped_column(String(5), nullable=True)
+    note = mapped_column(Text, nullable=True)
+    checked_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    checked_at = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (CheckConstraint("result IS NULL OR result IN ('dung','sai')", name='auto_checks_result_check'), Index('ix_auto_checks_pending', 'result', 'created_at'))
+
+class Treatment(Base):
+    __tablename__ = 'treatments'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    method = mapped_column(String(10), nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
+    est_cost = mapped_column(Numeric(18, 2), nullable=True)
+    est_source = mapped_column(String(30), nullable=False)
+    est_sample_n = mapped_column(Integer, nullable=False)
+    est_breakdown = mapped_column(JSON, nullable=False)
+    deadline_at = mapped_column(DateTime(timezone=True), nullable=True)
+    needs_approval = mapped_column(Boolean, nullable=False)
+    approval_reasons = mapped_column(JSON, nullable=False)
+    status = mapped_column(String(12), nullable=False)  # cho_duyet | hieu_luc | bi_tu_choi | thay_the
+    decided_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    decided_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    approved_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    approved_at = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_reason = mapped_column(Text, nullable=True)
+    __table_args__ = (CheckConstraint("method IN ('sua','tai_che','huy','khac')", name='treatments_method_check'),
+                      CheckConstraint("status IN ('cho_duyet','hieu_luc','bi_tu_choi','thay_the')", name='treatments_status_check'),
+                      Index('ix_treatments_case', 'case_id', 'decided_at'))
+
+class CostActual(Base):
+    __tablename__ = 'cost_actuals'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False, index=True)
+    treatment_id = mapped_column(ForeignKey('treatments.id'), nullable=True)
+    material = mapped_column(Numeric(18, 2), nullable=False)
+    hours = mapped_column(Numeric(8, 2), nullable=False)
+    hourly_rate = mapped_column(Numeric(18, 2), nullable=False)
+    other = mapped_column(Numeric(18, 2), nullable=False)
+    total = mapped_column(Numeric(18, 2), nullable=False)
+    root_causes = mapped_column(JSON, nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
+    entered_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    entered_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    __table_args__ = (CheckConstraint('material >= 0 AND hours >= 0 AND hourly_rate >= 0 AND other >= 0 AND total >= 0', name='cost_actuals_nonnegative'),)
+
+class Decision(Base):
+    __tablename__ = 'decisions'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False)
+    step = mapped_column(String(20), nullable=False)  # xac_nhan | phuong_an | cap_tren | dong | kiem_tra_mau
+    actor_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    actor_kind = mapped_column(String(10), nullable=False)
+    action = mapped_column(String(40), nullable=False)
+    reason = mapped_column(Text, nullable=True)
+    confidence = mapped_column(Numeric(5, 4), nullable=True)
+    suggestion = mapped_column(JSON, nullable=True)
+    agreed = mapped_column(Boolean, nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    reversible_until = mapped_column(DateTime(timezone=True), nullable=True)
+    reversed_at = mapped_column(DateTime(timezone=True), nullable=True)
+    defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=True)  # loại lỗi chính (để học/tạm dừng theo loại)
+    context = mapped_column(JSON, nullable=True)
+    entered_at = mapped_column(DateTime(timezone=True), nullable=True)  # lúc đề xuất vào bước (đo thời gian duyệt)
+    __table_args__ = (CheckConstraint("actor_kind IN ('nguoi','tu_dong','he_thong')", name='decisions_actor_kind_check'),
+                      Index('ix_decisions_case', 'case_id', 'at'), Index('ix_decisions_step', 'step', 'at'))
 
 class CaseDefect(Base, Versioned):
     __tablename__ = 'case_defects'
@@ -123,10 +302,18 @@ class CaseDefect(Base, Versioned):
     case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=False, index=True)
     defect_type_id = mapped_column(ForeignKey('defect_types.id'), nullable=False)
     occurrence_count = mapped_column(Integer, default=1, nullable=False)
-    severity = mapped_column(String(20), nullable=False)
+    level = mapped_column(String(12), nullable=False)
+    level_id = mapped_column(ForeignKey('defect_levels.id'), nullable=True)
+    level_criteria_snapshot = mapped_column(Text, default='', server_default='', nullable=False)
+    priority_snapshot = mapped_column(Boolean, default=False, server_default='false', nullable=False)
+    severity_original = mapped_column(String(20), nullable=True)
+    no_photo_reason = mapped_column(Text, nullable=True)
     suspected_cause = mapped_column(Text, nullable=True)
     verified_cause = mapped_column(Text, nullable=True)
-    __table_args__ = (CheckConstraint('occurrence_count > 0'), CheckConstraint("severity in ('low','medium','high','critical')"), UniqueConstraint('case_id','defect_type_id'))
+    defect_type_name_snapshot = mapped_column(String(160), nullable=False)
+    defect_type_code_snapshot = mapped_column(String(80), nullable=False)
+    note = mapped_column(Text, default='', server_default='', nullable=False)
+    __table_args__ = (CheckConstraint('occurrence_count > 0'), CheckConstraint("level IN ('nhe','trung_binh','nang')", name='case_defects_level_check'), UniqueConstraint('case_id','defect_type_id'))
 
 class CaseEvent(Base):
     __tablename__ = 'case_events'
@@ -166,6 +353,15 @@ class Attachment(Base, Versioned):
     content_type = mapped_column(String(100), nullable=False)
     size_bytes = mapped_column(Integer, nullable=False)
     uploaded_by = mapped_column(ForeignKey('users.id'), nullable=False)
+    case_defect_id = mapped_column(ForeignKey('case_defects.id'), nullable=True)
+    kind = mapped_column(String(10), default='truoc', server_default='truoc', nullable=False)
+    sha256 = mapped_column(String(64), nullable=False)
+    original_sha256 = mapped_column(String(64), nullable=True)
+    taken_at = mapped_column(DateTime(timezone=True), nullable=True)
+    quality = mapped_column(JSON, default=dict, server_default='{}', nullable=False)
+    width = mapped_column(Integer, nullable=True)
+    height = mapped_column(Integer, nullable=True)
+    __table_args__ = (CheckConstraint("kind IN ('truoc','sau')", name='attachments_kind_check'),)
 
 class ScanEvent(Base):
     __tablename__ = 'scan_events'
@@ -262,6 +458,73 @@ class AnalysisRecord(Base):
     row_version = mapped_column(Integer, nullable=False)
     data = mapped_column(JSON, nullable=False)
     scope_key = mapped_column(String(300), nullable=False)
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    type = mapped_column(String(20), nullable=False)
+    case_id = mapped_column(ForeignKey('defect_cases.id'), nullable=True)
+    title = mapped_column(String(200), nullable=False)
+    body = mapped_column(Text, nullable=False)
+    link = mapped_column(String(300), nullable=True)
+    dedupe_key = mapped_column(String(200), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    read_at = mapped_column(DateTime(timezone=True), nullable=True)
+    push_status = mapped_column(String(10), default='cho', nullable=False)  # cho | da_gui | bo_qua | loi
+    push_attempts = mapped_column(Integer, default=0, server_default='0', nullable=False)
+    __table_args__ = (UniqueConstraint('user_id', 'dedupe_key', name='notifications_dedupe_key'),
+                      Index('ix_notifications_user', 'user_id', 'created_at'), Index('ix_notifications_push', 'push_status'))
+
+class PushSubscription(Base):
+    __tablename__ = 'push_subscriptions'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=False)
+    endpoint = mapped_column(Text, unique=True, nullable=False)
+    p256dh = mapped_column(String(200), nullable=False)
+    auth = mapped_column(String(100), nullable=False)
+    user_agent = mapped_column(String(300), default='', server_default='', nullable=False)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    last_error = mapped_column(Text, nullable=True)
+
+report_code_seq = Sequence('report_code_seq', metadata=Base.metadata)
+
+class ReportExport(Base):
+    __tablename__ = 'report_exports'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    code = mapped_column(String(20), unique=True, nullable=False)
+    kind = mapped_column(String(10), nullable=False)  # thu_cong | dinh_ky
+    format = mapped_column(String(5), nullable=False)
+    params = mapped_column(JSON, nullable=False)
+    period_key = mapped_column(String(40), nullable=True)
+    created_by = mapped_column(ForeignKey('users.id'), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    file_ref = mapped_column(String(300), nullable=False)
+    sha256 = mapped_column(String(64), nullable=False)
+    size_bytes = mapped_column(Integer, nullable=False)
+    delivery = mapped_column(JSON, nullable=False)
+    __table_args__ = (UniqueConstraint('kind', 'period_key', name='report_exports_period_key'),
+                      CheckConstraint("kind IN ('thu_cong','dinh_ky')", name='report_exports_kind_check'),
+                      CheckConstraint("format IN ('pdf','xlsx')", name='report_exports_format_check'))
+
+class ErrorEvent(Base):
+    __tablename__ = 'error_events'
+    id = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uid)
+    source = mapped_column(String(10), nullable=False)
+    message = mapped_column(Text, nullable=False)
+    detail = mapped_column(Text, nullable=True)
+    path = mapped_column(String(300), nullable=True)
+    request_id = mapped_column(String(100), nullable=True)
+    user_id = mapped_column(ForeignKey('users.id'), nullable=True)
+    at = mapped_column(DateTime(timezone=True), default=now, nullable=False, index=True)
+    __table_args__ = (CheckConstraint("source IN ('server','client','worker')", name='error_events_source_check'),)
+
+class AppSetting(Base):
+    __tablename__ = 'app_settings'
+    key = mapped_column(String(80), primary_key=True)
+    value = mapped_column(JSON, nullable=False)
+    updated_at = mapped_column(DateTime(timezone=True), default=now, nullable=False)
+    updated_by = mapped_column(ForeignKey('users.id'), nullable=True)
 
 class SchemaMigration(Base):
     __tablename__ = 'schema_migrations'

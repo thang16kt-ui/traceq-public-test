@@ -32,13 +32,12 @@ def configure():
     os.environ['COOKIE_SECURE'] = 'true'
     os.environ.setdefault('DATA_DIR', '/data')
     os.environ.setdefault('ENVIRONMENT', 'demo')
-    os.environ.setdefault('PUBLIC_DEMO_ACCESS', 'true' if os.environ['ENVIRONMENT']=='demo' else 'false')
     Path(os.environ['DATA_DIR']).mkdir(parents=True, exist_ok=True)
     return int(os.getenv('PORT', '8000'))
 
 def main():
     port = configure()
-    from backend.app.cli import migrate, seed_demo
+    from backend.app.cli import demo_accounts_only, migrate, seed_demo
     migrate()
     if os.getenv('SEED_DEMO', '').lower() == 'true':
         from backend.app.db import SessionLocal
@@ -48,8 +47,15 @@ def main():
             empty = db.scalar(select(ProductType.id).limit(1)) is None
         if empty:
             seed_demo('DEMO_PASSWORD')
+        else:
+            demo_accounts_only('DEMO_PASSWORD')
+        if os.getenv('SAMPLE_DATA', '').lower() == 'pcba':
+            from backend.app.cli import seed_sample
+            seed_sample(int(os.getenv('SAMPLE_DATA_TOTAL', '1000')))
     commands = [
-        [sys.executable, '-m', 'uvicorn', 'scripts.serve_local:app', '--host', '0.0.0.0', '--port', str(port), '--no-access-log'],
+        [sys.executable, '-m', 'uvicorn', 'scripts.serve_local:app', '--host', '0.0.0.0', '--port', str(port), '--no-access-log',
+         # Render/Railway đứng sau proxy HTTPS: lấy IP thật từ X-Forwarded-For để giới hạn đăng nhập theo người.
+         '--proxy-headers', '--forwarded-allow-ips', os.getenv('FORWARDED_ALLOW_IPS', '*')],
         *[[sys.executable, '-m', 'worker.main', mode] for mode in ('scheduler', 'worker', 'importer')],
     ]
     children = []

@@ -133,7 +133,6 @@ def _snapshot(engine, run_id: str, attempt: int) -> dict:
         unit_ids = case_query.with_only_columns(m.DefectCase.unit_id)
         units = db.execute(select(m.Unit, m.Batch, m.ProductType).join(m.Batch, m.Batch.id == m.Unit.batch_id).join(m.ProductType, m.ProductType.id == m.Batch.product_type_id).where(m.Unit.id.in_(unit_ids))).all()
         unit_map = {unit.id: (unit, batch, product) for unit, batch, product in units}
-        kind_map = {kind.id: kind for kind in db.scalars(select(m.DefectType)).all()}
 
         def row_dict(row):
             return {column.name: getattr(row, column.name) for column in row.__table__.columns}
@@ -154,8 +153,8 @@ def _snapshot(engine, run_id: str, attempt: int) -> dict:
         defects = []
         for defect in defect_rows:
             row = row_dict(defect)
-            kind = kind_map[defect.defect_type_id]
-            row.update(code=kind.code, name=kind.name)
+            # Tên/mã theo snapshot lúc ghi nhận, không theo danh mục hiện tại.
+            row.update(code=defect.defect_type_code_snapshot, name=defect.defect_type_name_snapshot)
             defects.append(row)
         snapshot = normalize({"export_id": run.id, "revision": run.revision, "scope": run.scope, "period_start": run.period_start, "period_end": run.period_end, "timezone": run.timezone, "cutoff_at": cutoff, "format": run.format, "tables": {"inspection_sessions": session_data, "defect_cases": cases, "case_defects": defects, "cost_entries": [row_dict(r) for r in cost_rows], "cost_allocations": [row_dict(r) for r in allocation_rows]}})
         reference = f"snapshots/{run.id}.r{run.revision}.json"

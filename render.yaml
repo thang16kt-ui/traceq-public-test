@@ -29,6 +29,12 @@ services:
         value: /data
       - key: COOKIE_SECURE
         value: 'true'
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
 databases:
   - name: traceq-public-test-db
     databaseName: traceq_public_demo

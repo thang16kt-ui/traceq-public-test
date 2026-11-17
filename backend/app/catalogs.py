@@ -3,10 +3,10 @@ from uuid import UUID
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from .auth import ApiError, current_user, require_role
+from .auth import MANAGERS, ApiError, current_user, require_role
 from .catalog_keys import KEY_FIELDS, catalog_key, display_text
 from .db import get_db
 from .models import (AuditLog, Batch, CaseDefect, DefectCase, DefectType,
@@ -20,11 +20,7 @@ MODELS = {'product-types': ProductType, 'batches': Batch, 'defect-types': Defect
 
 
 def catalog_manager(user):
-    require_role(user, 'manager', 'admin')
-    # The shared demo identity must never pass privileged catalog operations,
-    # including sessions issued before this release when it already had admin.
-    if user.username == 'public.guest':
-        raise ApiError(403, 'CATALOG_LOGIN_REQUIRED', 'Đăng nhập tài khoản quản lý hoặc admin để thay đổi danh mục')
+    require_role(user, *MANAGERS)
 
 
 def catalog_lock(db):
@@ -59,6 +55,14 @@ def catalog_row(db, obj):
     result['usage'] = usage(db, obj)
     result['is_used'] = any(result['usage'].values())
     result['effective_active'] = obj.is_active
+    if isinstance(obj, ProductType):
+        for field in ('supervisor_id', 'backup_supervisor_id'):
+            person = db.get(User, getattr(obj, field)) if getattr(obj, field) else None
+            result[field.replace('_id', '')] = {'id': person.id, 'display_name': person.display_name, 'away_until': person.away_until.isoformat() if person.away_until else None} if person else None
+    if isinstance(obj, DefectType):
+        from .defect_config import levels_of
+        result['levels'] = [{'id': l.id, 'level': l.level, 'enabled': l.enabled, 'criteria': l.criteria, 'deadline_hours': l.deadline_hours,
+                             'suggested_actions': list(l.suggested_actions), 'priority': bool(obj.priority_flag)} for l in levels_of(db, obj.id)]
     if isinstance(obj, Batch):
         parent = db.get(ProductType, obj.product_type_id)
         result['product_type'] = {key: value for key, value in row(parent).items() if key not in KEY_FIELDS['product_types']}
@@ -101,6 +105,12 @@ def check_values(db, model, values, obj=None):
             values[field] = display_text(values[field])
             if not values[field]:
                 raise ApiError(422, 'EMPTY_CATALOG_NAME', 'Tên và mã danh mục không được để trống')
+    if model is ProductType:
+        for field in ('supervisor_id', 'backup_supervisor_id'):
+            if values.get(field):
+                person = db.get(User, values[field])
+                if not person or not person.is_active or not person.has('giam_sat'):
+                    raise ApiError(422, 'INVALID_SUPERVISOR', 'Người được chọn phải có vai trò Giám sát và đang hoạt động', {field: 'Chọn người có vai trò Giám sát'})
     if model is Batch:
         parent = db.get(ProductType, values['product_type_id'])
         # Existing historical rows can still be corrected under an inactive parent.
@@ -120,11 +130,7 @@ def propagate_metadata_versions(db, obj, before):
     """The exchange mirror rejects changed labels at an unchanged parent version."""
     timestamp = now()
     if isinstance(obj, DefectType):
-        if all(before[field] == getattr(obj, field) for field in ('name','code')): return
-        case_ids = select(CaseDefect.case_id).where(CaseDefect.defect_type_id == obj.id)
-        # Lock/update parents before children, as normal case edits do.
-        db.execute(update(DefectCase).where(DefectCase.id.in_(case_ids)).values(row_version=DefectCase.row_version+1, updated_at=timestamp))
-        db.execute(update(CaseDefect).where(CaseDefect.defect_type_id == obj.id).values(row_version=CaseDefect.row_version+1, updated_at=timestamp))
+        # Mục lỗi giữ snapshot tên/mã lúc ghi nhận: đổi tên danh mục không đổi bản ghi cũ.
         return
     fields = ('name','sku') if isinstance(obj, ProductType) else ('lot_code','product_type_id')
     if all(before[field] == getattr(obj, field) for field in fields): return
@@ -141,6 +147,9 @@ def create_catalog(model, data, request, user, db):
         check_values(db, model, values)
         obj = model(**values); db.add(obj); db.flush()
         if model is Batch: mark_catalog_used(db, ProductType, obj.product_type_id)
+        if model is DefectType:
+            from .defect_config import ensure_levels
+            ensure_levels(db, obj.id)  # 3 mức tắt sẵn; Quản lý bật và điền tiêu chí
         audit(db, user, 'create', model.__tablename__, obj.id, {'after': row(obj)}, request.state.request_id)
         return catalog_row(db, obj)
     return write(db, user, request, data.model_dump(mode='json'), action, 201)
@@ -186,6 +195,12 @@ def mutate_catalog(kind, catalog_id, data, request, user, db, operation):
             obj.is_active = False
             result_operation = 'deactivate'
         else:
+            if isinstance(obj, DefectType):
+                # Loại lỗi chưa dùng: xóa luôn các mức và lịch sử giá của nó.
+                from .models import DefectLevel, MarketPriceHistory
+                level_ids = select(DefectLevel.id).where(DefectLevel.defect_type_id == obj.id)
+                db.execute(delete(MarketPriceHistory).where(MarketPriceHistory.level_id.in_(level_ids)))
+                db.execute(delete(DefectLevel).where(DefectLevel.defect_type_id == obj.id))
             db.delete(obj)
             result_operation = 'delete'
         if result_operation != 'delete': bump(obj)
